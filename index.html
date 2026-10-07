@@ -201,13 +201,18 @@ table.al th,table.al td{border-bottom:1px solid var(--line);padding:3px 8px;text
             <label><input type="radio" name="fit" value="crop" data-k="fit" data-aff="3"><span>Crop to fill</span></label>
           </div>
         </div>
-        <label>Posterize (colour levels per channel, 0 = off)
-          <div class="rn"><input type="range" min="0" max="8" step="1" data-k="posterize" data-aff="2" data-t="int" aria-label="Posterize"><input type="number" min="0" max="8" step="1" data-k="posterize" data-aff="2" data-t="int" aria-label="Posterize value"></div>
+        <label class="chk"><input type="checkbox" data-k="removeBg" data-aff="4"> Remove the background (it becomes black squares)</label>
+        <label>Background tolerance
+          <div class="rn"><input type="range" min="4" max="40" data-k="bgTol" data-aff="4" data-t="int" aria-label="Background tolerance"><input type="number" min="4" max="40" data-k="bgTol" data-aff="4" data-t="int" aria-label="Background tolerance value"></div>
+        </label>
+        <label class="chk"><input type="checkbox" data-k="trim" data-aff="4"> Trim empty edges so the picture fills the grid</label>
+        <label>Color boost
+          <div class="rn"><input type="range" min="0" max="100" step="5" data-k="saturation" data-aff="2" data-t="int" aria-label="Color boost"><input type="number" min="0" max="100" step="5" data-k="saturation" data-aff="2" data-t="int" aria-label="Color boost value"></div>
         </label>
         <label>Contrast
           <div class="rn"><input type="range" min="-50" max="100" step="5" data-k="contrast" data-aff="2" data-t="int" aria-label="Contrast"><input type="number" min="-50" max="100" step="5" data-k="contrast" data-aff="2" data-t="int" aria-label="Contrast value"></div>
         </label>
-        <p class="hint">Tip: simple pictures with strong, flat colours work best. Photos with lots of detail turn muddy.</p>
+        <p class="hint">Tip: cartoons, clip art and icons with clear shapes work best. Use more rows and columns for more detail.</p>
       </fieldset>
     </div>
   </details>
@@ -220,6 +225,7 @@ table.al th,table.al td{border-bottom:1px solid var(--line);padding:3px 8px;text
           <label>Rows (5–30)<div class="rn"><input type="range" min="5" max="30" data-k="rows" data-aff="3" data-t="int" aria-label="Rows"><input type="number" min="5" max="30" data-k="rows" data-aff="3" data-t="int" aria-label="Rows value"></div></label>
           <label>Columns (5–30)<div class="rn"><input type="range" min="5" max="30" data-k="cols" data-aff="3" data-t="int" aria-label="Columns"><input type="number" min="5" max="30" data-k="cols" data-aff="3" data-t="int" aria-label="Columns value"></div></label>
         </div>
+        <div class="row"><button class="btn sm" type="button" id="matchShape">Match picture shape</button><span class="hint">Sets rows to fit the picture.</span></div>
         <label>Colors (2–12, fewer = fewer crayons)<div class="rn"><input type="range" min="2" max="12" data-k="k" data-aff="2" data-t="int" aria-label="Colors"><input type="number" min="2" max="12" data-k="k" data-aff="2" data-t="int" aria-label="Colors value"></div></label>
         <div class="row">
           <div class="seg" role="radiogroup" aria-label="Colour source">
@@ -229,11 +235,8 @@ table.al th,table.al td{border-bottom:1px solid var(--line);padding:3px 8px;text
           </div>
           <button class="btn sm" type="button" id="repick">Re-pick</button>
         </div>
-        <label class="chk"><input type="checkbox" data-k="blankTransparent" data-aff="2"> Transparent pixels are blank (black)</label>
-        <label class="chk"><input type="checkbox" data-k="blankWhite" data-aff="2"> Near-white pixels are blank (black)</label>
-        <label>Near-white threshold
-          <div class="rn"><input type="range" min="200" max="255" data-k="whiteThreshold" data-aff="2" data-t="int" aria-label="White threshold"><input type="number" min="200" max="255" data-k="whiteThreshold" data-aff="2" data-t="int" aria-label="White threshold value"></div>
-        </label>
+        <label class="chk"><input type="checkbox" data-k="darkBlank" data-aff="2"> Black outlines become black squares</label>
+        <label class="chk"><input type="checkbox" data-k="smooth" data-aff="2"> Clean up stray single squares</label>
         <label class="chk"><input type="checkbox" data-k="repaint" data-aff="0"> Repaint: click or drag on the picture to change cells</label>
         <div class="row"><button class="btn sm" type="button" id="undoPaint">Undo all repaints</button><span class="hint" id="paintCount"></span></div>
       </fieldset>
@@ -408,14 +411,15 @@ function rgb2lab(r, g, b) {
 const d2 = (a, b) => { const x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2]; return x * x + y * y + z * z; };
 const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
 const inkFor = c => lum(c) > 0.4 ? '#000' : '#fff';
-/* A standard 12-crayon box (black is left out: black squares are the blank cells). */
+/* A standard 12-crayon box, plus white for parts that stay uncolored. Black is left out: black squares are the blank cells. */
 const CRAYONS = [
   ['Red',[214,40,40]],['Orange',[245,130,30]],['Yellow',[250,220,40]],['Light green',[140,210,80]],['Green',[30,140,60]],['Sky blue',[100,185,235]],
-  ['Blue',[30,80,200]],['Purple',[120,60,170]],['Pink',[245,140,190]],['Brown',[125,80,45]],['Gray',[140,140,140]],['Peach',[250,205,170]]
+  ['Blue',[30,80,200]],['Purple',[120,60,170]],['Pink',[245,140,190]],['Brown',[125,80,45]],['Gray',[140,140,140]],['Peach',[250,205,170]],
+  ['White',[255,255,255]]
 ].map(([n, c]) => ({ n, c, lab: rgb2lab(...c) }));
 const NAMED = CRAYONS.concat([
   ['Lime',[160,210,50]],['Dark green',[20,100,50]],['Teal',[20,150,150]],['Navy',[20,40,110]],['Magenta',[200,40,150]],['Tan',[210,180,130]],
-  ['Maroon',[130,25,40]],['Light gray',[210,210,210]],['Charcoal',[55,55,60]],['White',[250,250,250]]
+  ['Maroon',[130,25,40]],['Light gray',[210,210,210]],['Charcoal',[55,55,60]]
 ].map(([n, c]) => ({ n, c, lab: rgb2lab(...c) })));
 function nameColors(pal) {
   const used = {};
@@ -435,7 +439,7 @@ const FALLBACK = [[220,40,40],[40,90,200],[250,220,40],[40,160,70],[130,60,170],
    ===================================================================== */
 const DEFAULTS = {
   rows: 10, cols: 10, fit: 'fit', k: 4, paletteMode: 'crayon', manualColors: [],
-  blankTransparent: true, blankWhite: true, whiteThreshold: 240, posterize: 0, contrast: 0, repaint: true,
+  removeBg: true, bgTol: 14, trim: true, darkBlank: true, smooth: true, saturation: 20, contrast: 0, repaint: true,
   keyDen: 100, maxAnswer: 2, bandMode: 'even', bandUpper: [], bandTotal: 0,
   op: 'add', addShare: 50, densText: '10, 100', pairType: 'unlike', maxDen: 100,
   forms: { proper: true, improper: true, mixed: true }, noRepeat: true,
@@ -665,7 +669,7 @@ function suggestDen(cfg, i, current) {
    ===================================================================== */
 let S = JSON.parse(JSON.stringify(DEFAULTS));
 S.seed = newSeed();
-const P = { src: null, srcName: '', sampled: null, palette: [], idx: [], near: [], edits: new Map(), fromFile: false, locked: false, tool: 0, cur: 0, status: '' };
+const P = { src: null, srcName: '', prep: null, pix: null, palette: [], idx: [], near: [], edits: new Map(), fromFile: false, locked: false, tool: 0, cur: 0, status: '' };
 const Z = { status: 'empty', cfg: null, info: [], result: null, errors: [], notes: [], warnings: [] };
 let tab = 'pic';
 
@@ -675,128 +679,271 @@ function setPath(o, p, v) { const ks = p.split('.'); const l = ks.pop(); ks.redu
 /* =====================================================================
    PICTURE PIPELINE
    ===================================================================== */
-function sampleImage(src, rows, cols, fit) {
-  const SUB = 12, W = cols * SUB, H = rows * SUB;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const ctx = cv.getContext('2d', { willReadFrequently: true });
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  const iw = src.width, ih = src.height;
-  let sx = 0, sy = 0, sw = iw, sh = ih, dx = 0, dy = 0, dw = W, dh = H;
-  if (fit === 'crop') { const ta = W / H, ia = iw / ih; if (ia > ta) { sw = ih * ta; sx = (iw - sw) / 2; } else { sh = iw / ta; sy = (ih - sh) / 2; } }
-  else { const sc = Math.min(W / iw, H / ih); dw = iw * sc; dh = ih * sc; dx = (W - dw) / 2; dy = (H - dh) / 2; }
-  ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
-  const data = ctx.getImageData(0, 0, W, H).data;
-  const rgb = [], alpha = [];
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-    let sr = 0, sg = 0, sb = 0, sa = 0;
-    for (let y = 0; y < SUB; y++) { let p = ((r * SUB + y) * W + c * SUB) * 4; for (let x = 0; x < SUB; x++, p += 4) { const a = data[p + 3]; sr += data[p] * a; sg += data[p + 1] * a; sb += data[p + 2] * a; sa += a; } }
-    alpha.push(sa / (255 * SUB * SUB));
-    rgb.push(sa > 0 ? [sr / sa, sg / sa, sb / sa] : [255, 255, 255]);
-  }
-  return { rgb, alpha };
+/* Stage A (once per picture): shrink, remove the background, trim to the subject.
+   Stage B (per grid): resample so every square is SUB×SUB pixels.
+   Stage C (per colour setting): every pixel votes for a crayon; each square takes the winner. */
+const WORK_MAX = 480, SUB = 12;
+const keyOf = (r, g, b) => (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
+const keyRGB = q => [((q >> 10) & 31) * 8 + 4, ((q >> 5) & 31) * 8 + 4, (q & 31) * 8 + 4];
+let LAB_TABLE = null;
+function labOfKey(q) {
+  if (!LAB_TABLE) { LAB_TABLE = new Float32Array(32768 * 3); for (let i = 0; i < 32768; i++) { const l = rgb2lab(...keyRGB(i)); LAB_TABLE[i * 3] = l[0]; LAB_TABLE[i * 3 + 1] = l[1]; LAB_TABLE[i * 3 + 2] = l[2]; } }
+  return LAB_TABLE;
+}
+/* Colour difference used to match crayons: CIE94 with lightness weighted half (kL = 2), so a shaded red
+   is still "red" and not "brown". The pixel is the reference, so greys never match a bright crayon. */
+function de94(p, c) {
+  const dL = p[0] - c[0], C1 = Math.hypot(p[1], p[2]), C2 = Math.hypot(c[1], c[2]), dC = C1 - C2;
+  const da = p[1] - c[1], db = p[2] - c[2], dH2 = Math.max(0, da * da + db * db - dC * dC);
+  const sc = 1 + 0.045 * C1, sh = 1 + 0.015 * C1;
+  return (dL / 2) * (dL / 2) + (dC / sc) * (dC / sc) + dH2 / (sh * sh);
 }
 
-function kmeans(points, k, rng) {
-  const n = points.length; if (!n) return [];
-  const cents = [points[Math.floor(rng() * n)].lab.slice()];
-  const minD = points.map(p => d2(p.lab, cents[0]));
-  while (cents.length < k) {
-    let sum = 0; for (const v of minD) sum += v;
-    if (sum < 1e-6) break;
-    let r = rng() * sum, pick = n - 1;
-    for (let i = 0; i < n; i++) { r -= minD[i]; if (r <= 0) { pick = i; break; } }
-    cents.push(points[pick].lab.slice());
-    for (let i = 0; i < n; i++) minD[i] = Math.min(minD[i], d2(points[i].lab, cents[cents.length - 1]));
+function removeBackground(d, W, H, tol) {
+  const n = W * H, lab = new Float32Array(n * 3), op = new Uint8Array(n), T = labOfKey();
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const p = y * W + x; if (d[p * 4 + 3] < 128) continue; op[p] = 1;
+    let r = 0, g = 0, b = 0, c = 0;                                  // 3×3 blur so JPEG noise does not stop the fill
+    if (n < 12000) { const o = p * 4; r = d[o]; g = d[o + 1]; b = d[o + 2]; c = 1; }       // tiny pictures (pixel art): no blur
+    else for (let yy = Math.max(0, y - 1); yy <= Math.min(H - 1, y + 1); yy++) for (let xx = Math.max(0, x - 1); xx <= Math.min(W - 1, x + 1); xx++) {
+      const o = (yy * W + xx) * 4; if (d[o + 3] < 128) continue; r += d[o]; g += d[o + 1]; b += d[o + 2]; c++;
+    }
+    const q = keyOf(r / c, g / c, b / c) * 3; lab[p * 3] = T[q]; lab[p * 3 + 1] = T[q + 1]; lab[p * 3 + 2] = T[q + 2];
   }
-  const kk = cents.length, asg = new Array(n).fill(0);
-  for (let it = 0; it < 40; it++) {
-    let moved = false;
-    for (let i = 0; i < n; i++) { let b = 0, bd = Infinity; for (let j = 0; j < kk; j++) { const dd = d2(points[i].lab, cents[j]); if (dd < bd) { bd = dd; b = j; } } if (asg[i] !== b) { asg[i] = b; moved = true; } }
-    const acc = Array.from({ length: kk }, () => [0, 0, 0, 0]);
-    for (let i = 0; i < n; i++) { const a = acc[asg[i]], l = points[i].lab; a[0] += l[0]; a[1] += l[1]; a[2] += l[2]; a[3]++; }
-    for (let j = 0; j < kk; j++) if (acc[j][3]) cents[j] = [acc[j][0] / acc[j][3], acc[j][1] / acc[j][3], acc[j][2] / acc[j][3]];
-    if (!moved) break;
+  const dist = (p, c) => { const a = lab[p * 3] - c[0], b = lab[p * 3 + 1] - c[1], e = lab[p * 3 + 2] - c[2]; return Math.sqrt(a * a + b * b + e * e); };
+  const border = [];
+  for (let x = 0; x < W; x++) border.push(x, (H - 1) * W + x);
+  for (let y = 1; y < H - 1; y++) border.push(y * W, y * W + W - 1);
+  const clusters = []; let opaque = 0;
+  for (const p of border) {
+    if (!op[p]) continue; opaque++;
+    const c = clusters.find(c => dist(p, c) < tol * 1.5);
+    if (c) { c.n++; for (let j = 0; j < 3; j++) c[j] += (lab[p * 3 + j] - c[j]) / c.n; }
+    else clusters.push(Object.assign([lab[p * 3], lab[p * 3 + 1], lab[p * 3 + 2]], { n: 1 }));
   }
-  const acc = Array.from({ length: kk }, () => [0, 0, 0, 0]);
-  for (let i = 0; i < n; i++) { const a = acc[asg[i]], c = points[i].rgb; a[0] += c[0]; a[1] += c[1]; a[2] += c[2]; a[3]++; }
-  return acc.filter(a => a[3]).map(a => [a[0] / a[3], a[1] / a[3], a[2] / a[3]]);
+  if (opaque < border.length * 0.5) return 0;                      // edges are already transparent
+  clusters.sort((a, b) => b.n - a.n);                             // background = the main edge colour, plus shades of it (a gradient sky)
+  const main = clusters[0], cd = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const bg = clusters.filter(c => c.n >= opaque * 0.03 && cd(c, main) < tol * 2.5);
+  if (bg.reduce((s, c) => s + c.n, 0) < opaque * 0.6) return 0;    // a scene or a full-frame photo: keep everything
+  const reg = new Int8Array(n).fill(-1), queue = new Int32Array(n); let qh = 0, qt = 0;
+  for (const p of border) {
+    if (!op[p] || reg[p] >= 0) continue;
+    let best = -1, bd = tol * 1.5;
+    bg.forEach((c, j) => { const dd = dist(p, c); if (dd < bd) { bd = dd; best = j; } });
+    if (best >= 0) { reg[p] = best; queue[qt++] = p; }
+  }
+  const step = Math.max(4, tol * 0.5), far = tol * 2.5;
+  while (qh < qt) {
+    const p = queue[qh++], x = p % W, c = bg[reg[p]];
+    for (const q of [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, p - W, p + W]) {
+      if (q < 0 || q >= n || reg[q] >= 0 || !op[q]) continue;
+      const a = lab[p * 3] - lab[q * 3], b = lab[p * 3 + 1] - lab[q * 3 + 1], e = lab[p * 3 + 2] - lab[q * 3 + 2];
+      if (Math.sqrt(a * a + b * b + e * e) < step && dist(q, c) < far) { reg[q] = reg[p]; queue[qt++] = q; }
+    }
+  }
+  for (let p = 0; p < n; p++) if (reg[p] >= 0) d[p * 4 + 3] = 0;
+  return qt;
 }
-function fillPalette(pal, k) {
-  const out = pal.map(c => c.slice());
-  for (const f of FALLBACK) {
-    if (out.length >= k) break;
-    const lf = rgb2lab(...f);
-    if (out.every(c => d2(rgb2lab(...c), lf) > 400)) out.push(f.slice());
+
+/* Pixel art saved enlarged (every art pixel is a B×B block): return B, or 1. */
+function pixelBlock(src) {
+  const W = src.width, H = src.height;
+  if (W > 2048 || H > 2048 || W < 8 || H < 8) return 1;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d', { willReadFrequently: true }); ctx.drawImage(src, 0, 0);
+  const d = ctx.getImageData(0, 0, W, H).data;
+  const same = (p, q) => d[p] === d[q] && d[p + 1] === d[q + 1] && d[p + 2] === d[q + 2] && d[p + 3] === d[q + 3];
+  let g = 0;
+  for (let t = 1; t <= 15; t++) {
+    const y = Math.floor(H * t / 16), x0 = Math.floor(W * t / 16);
+    let run = 1; for (let x = 1; x <= W; x++) { if (x < W && same((y * W + x) * 4, (y * W + x - 1) * 4)) run++; else { g = gcd(g, run); run = 1; } }
+    run = 1; for (let yy = 1; yy <= H; yy++) { if (yy < H && same((yy * W + x0) * 4, ((yy - 1) * W + x0) * 4)) run++; else { g = gcd(g, run); run = 1; } }
   }
-  for (let i = 0; out.length < k; i++) out.push(FALLBACK[i % FALLBACK.length].slice());
-  return out.slice(0, k);
+  if (g < 2 || W % g || H % g || g > Math.min(W, H) / 4) return 1;
+  for (let y = 0; y < H; y += Math.max(1, Math.floor(H / 97))) for (let x = 0; x < W; x += Math.max(1, Math.floor(W / 89))) {
+    if (!same((y * W + x) * 4, ((y - y % g) * W + (x - x % g)) * 4)) return 1;
+  }
+  return g;
+}
+
+function prepareSource(src) {
+  const B = pixelBlock(src);
+  const sc = B > 1 ? 1 / B : Math.min(1, WORK_MAX / Math.max(src.width, src.height));
+  const W = Math.max(1, Math.round(src.width * sc)), H = Math.max(1, Math.round(src.height * sc));
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = B === 1; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, W, H);
+  const img = ctx.getImageData(0, 0, W, H), d = img.data;
+  const removed = S.removeBg ? removeBackground(d, W, H, S.bgTol) : 0;
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] >= 128) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  ctx.putImageData(img, 0, 0);
+  const box = S.trim && x1 >= 0 ? { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } : { x: 0, y: 0, w: W, h: H };
+  return { canvas: cv, W, H, box, removed, empty: x1 < 0, pixelArt: B > 1 || (W <= 64 && H <= 64) };
 }
 
 function doSample() {
-  if (!P.src) { P.sampled = null; return; }
-  P.sampled = sampleImage(P.src, S.rows, S.cols, S.fit);
-}
-function adjustColor(c) {
-  let o = c.slice();
-  if (S.contrast) { const f = 1 + S.contrast / 100; o = o.map(v => clamp((v - 128) * f + 128, 0, 255)); }
-  if (S.posterize >= 2) { const n = S.posterize; o = o.map(v => Math.round(v / 255 * (n - 1)) / (n - 1) * 255); }
-  return o;
-}
-function doQuant(keepEdits) {
-  const sm = P.sampled; if (!sm) return;
-  const n = S.rows * S.cols, k = S.k;
-  const cols = [], blank = [];
-  for (let i = 0; i < n; i++) {
-    const a = sm.alpha[i], raw = sm.rgb[i];
-    const comp = raw.map(v => v * a + 255 * (1 - a));
-    let b = false;
-    if (S.blankTransparent && a < 0.5) b = true;
-    if (S.blankWhite && Math.min(comp[0], comp[1], comp[2]) >= S.whiteThreshold) b = true;
-    blank.push(b); cols.push(adjustColor(comp));
+  const pr = P.prep; if (!pr) { P.pix = null; return; }
+  const rows = S.rows, cols = S.cols, GW = cols * SUB, GH = rows * SUB, b = pr.box;
+  const cv = document.createElement('canvas'); cv.width = GW; cv.height = GH;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const s = S.fit === 'crop' ? Math.max(GW / b.w, GH / b.h) : Math.min(GW / b.w, GH / b.h);
+  ctx.imageSmoothingEnabled = s < 1; ctx.imageSmoothingQuality = 'high';  // keep small pixel-art crisp when enlarging
+  const dw = b.w * s, dh = b.h * s;
+  ctx.drawImage(pr.canvas, b.x, b.y, b.w, b.h, (GW - dw) / 2, (GH - dh) / 2, dw, dh);
+  const d = ctx.getImageData(0, 0, GW, GH).data, keys = new Uint16Array(GW * GH), hist = new Uint32Array(32768);
+  for (let j = 0, p = 0; j < GW * GH; j++, p += 4) {
+    if (d[p + 3] < 128) { keys[j] = 0xFFFF; continue; }
+    const q = keyOf(d[p], d[p + 1], d[p + 2]); keys[j] = q; hist[q]++;
   }
-  let pal;
-  if (S.paletteMode === 'crayon') pal = crayonPalette(cols, blank, k);
-  else if (S.paletteMode === 'manual') {
-    while (S.manualColors.length < k) S.manualColors.push(toHex(FALLBACK[S.manualColors.length % FALLBACK.length]));
-    S.manualColors.length = k;
-    pal = S.manualColors.map(fromHex);
-  } else {
-    const pts = []; for (let i = 0; i < n; i++) if (!blank[i]) pts.push({ rgb: cols[i], lab: rgb2lab(...cols[i]) });
-    pal = fillPalette(kmeans(pts, k, makeRng('palette-' + k)), k);
-    pal.sort((p, q) => rgb2lab(...p)[0] - rgb2lab(...q)[0]);
-  }
-  const labs = pal.map(c => rgb2lab(...c));
-  P.palette = pal;
-  P.near = cols.map(c => { const l = rgb2lab(...c); let b = 0, bd = Infinity; labs.forEach((x, j) => { const dd = d2(l, x); if (dd < bd) { bd = dd; b = j; } }); return b; });
-  P.idx = P.near.map((v, i) => blank[i] ? -1 : v);
-  if (!keepEdits) P.edits.clear();
-  for (const [i, v] of P.edits) if (i < n && v < k) P.idx[i] = v;
-  if (P.tool >= k) P.tool = 0;
+  P.pix = { keys, hist, GW, GH };
 }
 
-/* Choose the k crayons from the 12-box that best cover the picture: start with every crayon the picture
-   needs, then keep dropping the one whose loss changes the picture least. */
-function crayonPalette(cols, blank, k) {
-  const labs = cols.map(c => rgb2lab(...c));
-  const cl = CRAYONS.map(c => c.lab), act = new Set();
-  const nearest = (l, set) => { let b = -1, bd = Infinity; for (const j of set) { const dd = d2(l, cl[j]); if (dd < bd) { bd = dd; b = j; } } return [b, bd]; };
-  const all = CRAYONS.map((_, j) => j);
-  labs.forEach((l, i) => { if (!blank[i]) act.add(nearest(l, all)[0]); });
+function adjustColor(c) {
+  let o = c.slice();
+  if (S.saturation) { const g = 0.299 * o[0] + 0.587 * o[1] + 0.114 * o[2], f = 1 + S.saturation / 100; o = o.map(v => clamp(g + (v - g) * f, 0, 255)); }
+  if (S.contrast) { const f = 1 + S.contrast / 100; o = o.map(v => clamp((v - 128) * f + 128, 0, 255)); }
+  return o;
+}
+
+/* Weighted k-means in Lab, for "Exact image colors". */
+function kmeansW(pts, k, rng) {
+  const n = pts.length; if (!n) return [];
+  let tot = 0; for (const p of pts) tot += p.w;
+  const pickW = (ws, sum) => { let r = rng() * sum; for (let i = 0; i < n; i++) { r -= ws[i]; if (r <= 0) return i; } return n - 1; };
+  const cents = [pts[pickW(pts.map(p => p.w), tot)].lab.slice()];
+  const minD = pts.map(p => d2(p.lab, cents[0]));
+  while (cents.length < k) {
+    const ws = pts.map((p, i) => p.w * minD[i]); const sum = ws.reduce((a, b) => a + b, 0);
+    if (sum < 1e-6) break;
+    cents.push(pts[pickW(ws, sum)].lab.slice());
+    pts.forEach((p, i) => { minD[i] = Math.min(minD[i], d2(p.lab, cents[cents.length - 1])); });
+  }
+  const asg = new Int32Array(n);
+  for (let it = 0; it < 25; it++) {
+    for (let i = 0; i < n; i++) { let b = 0, bd = Infinity; for (let j = 0; j < cents.length; j++) { const dd = d2(pts[i].lab, cents[j]); if (dd < bd) { bd = dd; b = j; } } asg[i] = b; }
+    const acc = cents.map(() => [0, 0, 0, 0]);
+    pts.forEach((p, i) => { const a = acc[asg[i]]; a[0] += p.lab[0] * p.w; a[1] += p.lab[1] * p.w; a[2] += p.lab[2] * p.w; a[3] += p.w; });
+    acc.forEach((a, j) => { if (a[3]) cents[j] = [a[0] / a[3], a[1] / a[3], a[2] / a[3]]; });
+  }
+  const acc = cents.map(() => [0, 0, 0, 0]);
+  pts.forEach((p, i) => { const a = acc[asg[i]]; a[0] += p.rgb[0] * p.w; a[1] += p.rgb[1] * p.w; a[2] += p.rgb[2] * p.w; a[3] += p.w; });
+  return acc.filter(a => a[3]).map(a => [a[0] / a[3], a[1] / a[3], a[2] / a[3]]);
+}
+
+/* Choose up to k crayons: start with every crayon the picture needs, then keep dropping the one whose loss
+   changes the picture least. */
+function crayonPalette(pts, k) {
+  const cl = CRAYONS.map(c => c.lab), m = cl.length;
+  const dist = pts.map(p => cl.map(c => de94(p.lab, c)));
+  const act = new Set();
+  pts.forEach((p, i) => { let b = 0; for (let j = 1; j < m; j++) if (dist[i][j] < dist[i][b]) b = j; act.add(b); });
+  const nearIn = (i, set) => { let b = -1, bd = Infinity; for (const j of set) if (dist[i][j] < bd) { bd = dist[i][j]; b = j; } return [b, bd]; };
   while (act.size > k) {
     let worst = -1, wc = Infinity;
     for (const c of act) {
       const rest = new Set(act); rest.delete(c); let cost = 0;
-      labs.forEach((l, i) => { if (blank[i]) return; const [b, bd] = nearest(l, act); if (b === c) cost += nearest(l, rest)[1] - bd; });
+      pts.forEach((p, i) => { const [b, bd] = nearIn(i, act); if (b === c) cost += p.w * (nearIn(i, rest)[1] - bd); });
       if (cost < wc) { wc = cost; worst = c; }
     }
     act.delete(worst);
   }
-  while (act.size < Math.min(k, 2)) {                         // never fewer than 2 colors; otherwise use only the crayons the picture needs
-    let best = -1, bm = -1;
-    for (const j of all) if (!act.has(j)) { let m = Infinity; for (const a of act) m = Math.min(m, d2(cl[j], cl[a])); if (m > bm) { bm = m; best = j; } }
-    act.add(best);
+  return [...act].map(j => CRAYONS[j].c.slice());
+}
+function addContrastColor(pal) {
+  let best = null, bm = -1;
+  for (const c of CRAYONS) { const m = Math.min(...pal.map(p => d2(c.lab, rgb2lab(...p)))); if (m > bm) { bm = m; best = c.c; } }
+  return pal.concat([best.slice()]);
+}
+
+function doQuant() {
+  const px = P.pix; if (!px) return;
+  const { keys, hist, GW, GH } = px, rows = S.rows, cols = S.cols, n = rows * cols, k = S.k;
+  const klab = new Float32Array(32768 * 3), kind = new Uint8Array(32768), pts = [];  // kind: 1 = colour, 2 = dark (black square)
+  for (let q = 0; q < 32768; q++) {
+    if (!hist[q]) continue;
+    const rgb = adjustColor(keyRGB(q)), l = rgb2lab(...rgb);
+    klab[q * 3] = l[0]; klab[q * 3 + 1] = l[1]; klab[q * 3 + 2] = l[2];
+    if (S.darkBlank && l[0] < 18) { kind[q] = 2; continue; }
+    kind[q] = 1; pts.push({ q, lab: l, rgb, w: hist[q] });
   }
-  return [...act].map(j => CRAYONS[j].c.slice()).sort((p, q) => rgb2lab(...p)[0] - rgb2lab(...q)[0]);
+  const fixed = S.paletteMode === 'manual';
+  let pal;
+  if (fixed) {
+    while (S.manualColors.length < k) S.manualColors.push(toHex(FALLBACK[S.manualColors.length % FALLBACK.length]));
+    S.manualColors.length = k;
+    pal = S.manualColors.map(fromHex);
+  } else if (S.paletteMode === 'crayon') pal = crayonPalette(pts, k);
+  else pal = kmeansW(pts, k, makeRng('palette-' + k));
+  if (!pal.length) pal = [CRAYONS[0].c.slice()];
+
+  let idx, near, votes;
+  const vote = () => {
+    const labs = pal.map(c => rgb2lab(...c)), K = pal.length, lut = new Int8Array(32768);
+    for (const p of pts) { let b = 0, bd = Infinity; labs.forEach((c, j) => { const dd = de94(p.lab, c); if (dd < bd) { bd = dd; b = j; } }); lut[p.q] = b; }
+    votes = new Float32Array(n * (K + 1));
+    for (let y = 0; y < GH; y++) {
+      const rowBase = Math.floor(y / SUB) * cols;
+      for (let x = 0; x < GW; x++) {
+        const q = keys[y * GW + x], i = rowBase + Math.floor(x / SUB);
+        votes[i * (K + 1) + (q === 0xFFFF || kind[q] === 2 ? K : lut[q])]++;
+      }
+    }
+    idx = new Array(n); near = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const o = i * (K + 1); let b = 0;
+      for (let j = 1; j < K; j++) if (votes[o + j] > votes[o + b]) b = j;
+      near[i] = b;
+      idx[i] = votes[o + K] * 2 >= SUB * SUB ? -1 : b;           // mostly background or outline: black square
+    }
+  };
+  const counts = () => { const c = new Array(pal.length).fill(0); idx.forEach(v => { if (v >= 0) c[v]++; }); return c; };
+  vote();
+  for (let pass = 0; !fixed && pass < 4; pass++) {                 // drop crayons that win no square, then re-vote
+    const c = counts(); if (c.every(v => v > 0) || pal.length <= 2) break;
+    const keep = pal.filter((_, j) => c[j] > 0);
+    if (keep.length < 2) break;
+    pal = keep; vote();
+  }
+  if (S.smooth) {                                                  // a lone square inside a different area joins that area
+    const src = idx.slice();
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const i = r * cols + c, v = src[i], tally = new Map(); let same4 = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dy && !dx) continue; const rr = r + dy, cc = c + dx; if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
+        const u = src[rr * cols + cc]; tally.set(u, (tally.get(u) || 0) + 1); if ((!dy || !dx) && u === v) same4++;
+      }
+      if (same4) continue;
+      for (const [u, t] of tally) if (u !== v && t >= 5) { idx[i] = u; break; }
+    }
+  }
+  if (!fixed) {
+    const c = counts();
+    let order = pal.map((_, j) => j).filter(j => c[j] > 0);
+    if (order.length < 2) order = pal.map((_, j) => j).sort((a, b) => c[b] - c[a]).slice(0, 2);
+    order.sort((a, b) => rgb2lab(...pal[a])[0] - rgb2lab(...pal[b])[0]);
+    const remap = new Map(order.map((j, t) => [j, t]));
+    pal = order.map(j => pal[j]);
+    idx = idx.map(v => v < 0 ? -1 : remap.has(v) ? remap.get(v) : 0);
+    near = near.map(v => remap.has(v) ? remap.get(v) : 0);
+    if (pal.length < 2) pal = addContrastColor(pal);
+  }
+  P.palette = pal; P.idx = idx; P.near = near;
+  for (const [i, v] of P.edits) if (i < n && v < pal.length) P.idx[i] = v;
+  if (P.tool >= pal.length) P.tool = 0;
+}
+
+/* Rows and columns that match the trimmed picture's shape, keeping the current number of columns. */
+function matchShape() {
+  if (!P.prep) return;
+  const b = P.prep.box, a = b.h / b.w;
+  if (P.prep.pixelArt && b.w >= 5 && b.h >= 5 && b.w <= 30 && b.h <= 30) { S.cols = b.w; S.rows = b.h; return; }  // one square per art pixel
+  let cols = S.cols, rows = Math.round(cols * a);
+  if (rows > 30) { rows = 30; cols = Math.round(30 / a); }
+  if (rows < 5) { rows = 5; cols = Math.round(5 / a); }
+  S.rows = clamp(rows, 5, 30); S.cols = clamp(cols, 5, 30);
 }
 
 /* Re-compute questions, warnings and the puzzle itself. */
@@ -921,7 +1068,7 @@ function studentPageHTML() {
   const lay = studentLayout();
   const cells = Z.result.cells.map(c => c.blank ? '<div class="cell blank"></div>' : `<div class="cell">${probHTML(c.prob, S.fracStyle)}</div>`).join('');
   return `<section class="page" data-kind="student" style="--fs:${lay.fs.toFixed(2)}pt">
-    ${headerHTML('', 'Solve each problem. Find the answer in the color key, then color the square that color. Blank squares are black.')}
+    ${headerHTML('', 'Solve each problem. Find the answer in the color key, then color the square that color. Blank squares are black.' + (P.palette.some(c => toHex(c) === '#ffffff') ? ' White means leave the square uncolored.' : ''))}
     <div class="gridwrap" style="height:${gridMm()}mm"><div class="sgrid" style="grid-template-columns:repeat(${S.cols},${lay.cell.toFixed(3)}mm);grid-auto-rows:${lay.cell.toFixed(3)}mm">${cells}</div></div>
     ${keyHTML()}${footHTML()}</section>`;
 }
@@ -1011,11 +1158,11 @@ function renderPicture() {
     <div style="flex:1 1 320px;min-width:0"><div class="pgrid${S.repaint && !P.locked ? ' edit' : ''}" id="pgrid" tabindex="0" role="application" aria-label="Picture, ${S.rows} rows by ${S.cols} columns. Arrow keys move, Space paints, B toggles blank."
       style="grid-template-columns:repeat(${S.cols},1fr);--ar:${S.cols / S.rows}">${cells}</div></div>
     <div class="side"><div class="hint" style="color:var(--ink)"><b>${S.rows}×${S.cols}</b> grid, ${P.palette.length} colors${P.locked ? ' · locked' : ''}</div>
-      ${P.src ? '<canvas class="thumb" id="thumb" aria-label="Original picture"></canvas>' : ''}
+      ${P.prep ? '<div class="hint">What the tool sees (background removed, trimmed):</div><canvas class="thumb" id="thumb" aria-label="Picture after background removal"></canvas>' : ''}
       <div class="hint">${S.repaint && !P.locked ? 'Pick a paint color, then click or drag on the picture. Right-click a cell to toggle blank.' : (P.locked ? 'The picture is locked. Unlock it to repaint.' : 'Repaint is off.')}</div>
       <div role="radiogroup" aria-label="Paint tool">${pal}${blankRow}</div></div></div>`;
   const th = $('#thumb', pvEl);
-  if (th && P.src) { const w = 150, h = Math.max(1, Math.round(w * P.src.height / P.src.width)); th.width = w; th.height = h; th.getContext('2d').drawImage(P.src, 0, 0, w, h); }
+  if (th && P.prep) { const b = P.prep.box, w = 150, h = Math.max(1, Math.round(w * b.h / b.w)); th.width = w; th.height = h; th.getContext('2d').drawImage(P.prep.canvas, b.x, b.y, b.w, b.h, 0, 0, w, h); }
   markCursor();
   $('#paintCount').textContent = P.edits.size ? `${P.edits.size} cell${P.edits.size === 1 ? '' : 's'} repainted` : '';
 }
@@ -1089,7 +1236,7 @@ function syncInputs() {
   });
   const lock = P.locked || P.fromFile;
   $$('#fs1 [data-k], #fs2 [data-k]').forEach(el => { if (['repaint'].includes(el.dataset.k)) return; el.disabled = lock; });
-  $('#repick').disabled = lock; $('#undoPaint').disabled = P.locked;
+  $('#repick').disabled = lock; $('#matchShape').disabled = lock; $('#undoPaint').disabled = P.locked;
   const rep = $('#fs2 [data-k=repaint]'); if (rep) rep.disabled = P.locked;
   if (P.fromFile) $('#fs1').disabled = false;
   $('#fs1 #file').disabled = P.locked;
@@ -1109,8 +1256,9 @@ function schedule(stage) {
 }
 function flush() {
   const st = pendingStage; pendingStage = -1; clearTimeout(timer);
-  if (st >= 3 && P.src) { P.edits.clear(); doSample(); }
-  if (st >= 2 && P.src) { if (st === 2) P.edits.clear(); doQuant(st < 2); }
+  if (st >= 4 && P.src) P.prep = prepareSource(P.src);
+  if (st >= 3 && P.src) doSample();
+  if (st >= 2 && P.src) { P.edits.clear(); doQuant(); }
   if (st >= 1 || st === -1) doPuzzle();
   if (st === 0 && !Z.cfg) doPuzzle();
   renderAll();
@@ -1177,6 +1325,7 @@ function regenerate() { S.seed = newSeed(); applyNow(1); }
 $('#regen').addEventListener('click', regenerate);
 $('#regenSm').addEventListener('click', regenerate);
 $('#gen').addEventListener('click', () => { applyNow(1); if (tab === 'pic' && Z.status === 'ok') { tab = 'stu'; renderPreview(); } });
+$('#matchShape').addEventListener('click', () => { matchShape(); applyNow(3); });
 $('#repick').addEventListener('click', () => { S.paletteMode = 'crayon'; applyNow(2); });
 $('#undoPaint').addEventListener('click', () => { if (P.src) applyNow(2); else { P.edits.clear(); renderAll(); } });
 
@@ -1202,6 +1351,8 @@ function useSource(src, name) {
   $('#fileMsg').className = 'status';
   if (S.paletteMode === 'manual' && !S.manualColors.length) S.manualColors = [];
   if (tab !== 'pic' && Z.status !== 'ok') tab = 'pic';
+  P.prep = prepareSource(src);
+  if (!P.locked) matchShape();
   applyNow(3);
 }
 $('#file').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
@@ -1346,8 +1497,8 @@ function importSettings(raw) {
   }
   Object.assign(d, {
     rows, cols, k, fit: oneOf(s.fit, ['fit', 'crop'], d.fit), paletteMode: 'manual', manualColors: pic.palette.map(h => h.toLowerCase()),
-    blankTransparent: !!s.blankTransparent, blankWhite: !!s.blankWhite, whiteThreshold: int(s.whiteThreshold, 200, 255, d.whiteThreshold),
-    posterize: int(s.posterize, 0, 8, 0), contrast: int(s.contrast, -50, 100, 0), repaint: s.repaint !== false,
+    removeBg: s.removeBg !== false, bgTol: int(s.bgTol, 4, 40, d.bgTol), trim: s.trim !== false, darkBlank: s.darkBlank !== false,
+    smooth: s.smooth !== false, saturation: int(s.saturation, 0, 100, d.saturation), contrast: int(s.contrast, -50, 100, 0), repaint: s.repaint !== false,
     keyDen: int(s.keyDen, 2, 1000, 100), maxAnswer: s.maxAnswer === 1 ? 1 : 2, bandMode: oneOf(s.bandMode, ['even', 'custom'], 'even'),
     bandUpper: Array.isArray(s.bandUpper) ? s.bandUpper.map(Number).filter(Number.isInteger) : [], bandTotal: int(s.bandTotal, 0, 4000, 0),
     op: oneOf(s.op, ['add', 'sub', 'mixed'], 'add'), addShare: int(s.addShare, 0, 100, 50), densText: String(s.densText || d.densText).slice(0, 60),
@@ -1358,7 +1509,7 @@ function importSettings(raw) {
     showAnswers: !!s.showAnswers, seed: String(s.seed || newSeed()).slice(0, 40)
   });
   S = d;
-  P.src = null; P.sampled = null; P.fromFile = true; P.edits.clear();
+  P.src = null; P.prep = null; P.pix = null; P.fromFile = true; P.edits.clear();
   P.palette = pic.palette.map(fromHex); P.idx = idx; P.near = idx.map((v, i) => v < 0 ? 0 : v); P.tool = 0;
   $('#fileMsg').textContent = 'Picture restored from settings file.';
 }
@@ -1428,7 +1579,7 @@ $('#selfTest').addEventListener('click', async e => {
 window.__app = { S: () => S, P, Z, selfTest, mountPrint, deriveConfig, buildPuzzle, verifyCell, problemsFor, applyNow, probText };
 (function boot() {
   syncInputs();
-  $$('[data-k]').forEach(el => { const k = el.dataset.k; if (['rows','cols','k','fit','paletteMode','blankTransparent','blankWhite','whiteThreshold','posterize','contrast'].includes(k)) el.setAttribute('data-pic', '1'); });
+  $$('[data-k]').forEach(el => { const k = el.dataset.k; if (['rows','cols','k','fit','paletteMode','removeBg','bgTol','trim','darkBlank','smooth','saturation','contrast'].includes(k)) el.setAttribute('data-pic', '1'); });
   flush();
 })();
 </script>

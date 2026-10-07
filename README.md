@@ -9,6 +9,16 @@ Upload a picture (PNG, JPG or WebP), choose a grid size and up to 12 colors (sna
 - a per-cell **answer list** (print or CSV),
 - a **settings file** (JSON) that rebuilds the same puzzle.
 
+## How pictures are turned into squares
+
+- The background is found from the picture's edges (plain, gradient or colored) and removed, so only the
+  outside becomes black squares. White parts inside the picture stay as a "White: leave uncolored" color.
+- The picture is trimmed to the subject, and the rows are matched to its shape.
+- Every pixel votes for its nearest crayon (matched by hue first, so shaded colors keep their color);
+  each square takes the winning crayon. No averaged "mud" colors.
+- Black outlines become black squares, and stray single squares are cleaned up.
+- Pixel art (small, or saved enlarged) gets exactly one square per art pixel.
+
 ## How answers stay correct
 
 The engine picks each cell's answer first, then builds a problem that produces it, using whole-number
