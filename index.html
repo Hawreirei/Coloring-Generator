@@ -1,0 +1,1382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mystery Pixel Fraction Puzzle Generator</title>
+<style>
+:root{
+  --bg:#f3f4f7; --panel:#fff; --ink:#1c2230; --mute:#596277; --line:#d8dce5; --soft:#eef0f5;
+  --accent:#2152d1; --accent-ink:#fff; --warn:#7a4f00; --warnbg:#fff3d1; --err:#9b1c1c; --errbg:#fde9e9;
+  --ok:#11663a; --okbg:#e5f6ec; --focus:#ffb000;
+}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+html{color-scheme:light}
+body{margin:0;font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled,input:disabled,select:disabled{cursor:not-allowed;opacity:.55}
+:focus-visible{outline:3px solid var(--focus);outline-offset:1px}
+
+/* ---------- app shell ---------- */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:12px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.top h1{margin:0;font-size:18px;flex:1 1 280px}
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.steps a{display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border-radius:99px;background:var(--soft);color:var(--ink);text-decoration:none;font-size:13px}
+.steps a b{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px}
+.shell{display:grid;grid-template-columns:minmax(320px,410px) minmax(0,1fr);gap:16px;padding:16px;align-items:start}
+.panel{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0}
+.card>summary{list-style:none;cursor:pointer;padding:11px 14px;font-weight:650;display:flex;align-items:center;gap:10px}
+.card>summary::-webkit-details-marker{display:none}
+.card>summary .num{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px}
+.card>summary::after{content:"▾";margin-left:auto;color:var(--mute)}
+.card:not([open])>summary::after{content:"▸"}
+.card .body{padding:2px 14px 14px;display:grid;gap:11px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+label{display:grid;gap:3px;font-size:13px;color:var(--mute)}
+label.row,.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+label.chk{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px}
+.grp{display:grid;gap:8px}
+.grp2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+input[type=number],input[type=text],select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=color]{width:34px;height:28px;padding:0;border:1px solid var(--line);border-radius:5px;background:#fff}
+.rn{display:grid;grid-template-columns:1fr 70px;gap:8px;align-items:center}
+.hint{font-size:12.5px;color:var(--mute);margin:0}
+.btn{padding:7px 12px;border:1px solid var(--line);border-radius:7px;background:#fff}
+.btn:hover:not(:disabled){background:var(--soft)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover:not(:disabled){background:#1a43ad}
+.btn.sm{padding:4px 9px;font-size:13px}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px}
+.drop{display:grid;place-items:center;text-align:center;gap:4px;padding:18px 12px;border:2px dashed #a9b2c6;border-radius:10px;background:#fafbfd;cursor:pointer;color:var(--mute)}
+.drop.over{border-color:var(--accent);background:#eef3ff}
+.drop strong{color:var(--ink)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg label{display:block;color:var(--ink);font-size:13px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:block;padding:5px 11px;cursor:pointer}
+.seg input:checked+span{background:var(--accent);color:#fff}
+.seg input:focus-visible+span{outline:3px solid var(--focus);outline-offset:-3px}
+.status{font-size:13px;min-height:1.2em}
+.status.err{color:var(--err)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:3px 9px;border:1px solid var(--line);border-radius:99px;background:#fff;font-size:12.5px}
+.rangeedit{display:grid;gap:6px}
+.rrow{display:grid;grid-template-columns:22px 1fr auto 86px;gap:8px;align-items:center;font-size:13px}
+.sw{display:inline-block;width:20px;height:20px;border-radius:4px;border:1px solid rgba(0,0,0,.45)}
+.exp{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+.exp .hint{flex-basis:100%}
+
+/* ---------- preview side ---------- */
+.stage{min-width:0;display:grid;gap:12px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tabs [role=tab]{padding:7px 14px;border:1px solid var(--line);border-radius:8px 8px 0 0;background:var(--soft)}
+.tabs [role=tab][aria-selected=true]{background:#fff;border-bottom-color:#fff;font-weight:650}
+.tabs .sp{flex:1}
+.lockb{padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.lockb[aria-pressed=true]{background:#fff3d1;border-color:#e0b24c}
+.pvpane{background:var(--panel);border:1px solid var(--line);border-radius:0 10px 10px 10px;padding:14px;min-height:300px;overflow:hidden}
+.notes{display:grid;gap:6px}
+.note{padding:8px 12px;border-radius:8px;font-size:13.5px;border:1px solid transparent}
+.note.err{background:var(--errbg);color:var(--err);border-color:#f0b4b4}
+.note.warn{background:var(--warnbg);color:var(--warn);border-color:#ecd18a}
+.note.ok{background:var(--okbg);color:var(--ok);border-color:#a8dcbc}
+.note.info{background:var(--soft);color:var(--mute)}
+.empty{display:grid;gap:10px;place-items:center;text-align:center;padding:50px 10px;color:var(--mute)}
+.pictop{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start}
+.pgrid{display:grid;gap:0;border:1px solid #333;touch-action:none;user-select:none;-webkit-user-select:none;background:#333;width:min(100%,calc(62vh * var(--ar)),640px);aspect-ratio:var(--ar)}
+.pgrid .pc{border:.5px solid rgba(0,0,0,.18)}
+.pgrid.edit .pc{cursor:crosshair}
+.pgrid .pc.cur{outline:3px solid var(--focus);outline-offset:-3px;position:relative;z-index:1}
+.pgrid .pc.bl{background:#000}
+.side{display:grid;gap:10px;min-width:220px;flex:1 1 220px}
+.palrow{display:grid;grid-template-columns:auto 34px 1fr auto;gap:8px;align-items:center;padding:4px 6px;border:1px solid transparent;border-radius:8px;font-size:13.5px}
+.palrow.sel{border-color:var(--accent);background:#eef3ff}
+.palrow .cnt{color:var(--mute);font-size:12px}
+.thumb{max-width:150px;border:1px solid var(--line);border-radius:6px;background:repeating-conic-gradient(#e6e8ee 0 25%,#fff 0 50%) 0 0/12px 12px}
+.pvwrap{margin:0 auto 14px;box-shadow:0 2px 12px rgba(20,30,50,.18);background:#fff;overflow:hidden}
+.pvpages{display:grid;justify-items:center;background:#e4e7ee;padding:14px;border-radius:8px}
+table.al{border-collapse:collapse;width:100%;font-size:13px}
+table.al th,table.al td{border-bottom:1px solid var(--line);padding:3px 8px;text-align:left}
+.stbar{height:8px;border-radius:4px;background:var(--soft);overflow:hidden}
+.stbar i{display:block;height:100%;background:var(--accent);width:0}
+
+/* ---------- fractions (screen + print) ---------- */
+.fr{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:1.12;text-align:center}
+.fr .n{padding:0 .14em .05em;border-bottom:.075em solid currentColor}
+.fr .d{padding:.05em .14em 0}
+.mx{display:inline-flex;align-items:center;gap:.14em}
+.opd{display:inline-flex;align-items:center}
+.op{margin:0 .3em;font-weight:600}
+.prob{display:flex;align-items:center;justify-content:center;white-space:nowrap;font-variant-numeric:tabular-nums}
+.prob.sl{flex-direction:column;line-height:1.2}
+
+/* ---------- printable pages ---------- */
+.page{background:#fff;color:#000;width:210mm;height:297mm;padding:10mm;display:flex;flex-direction:column;gap:2mm;overflow:hidden;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.page.flow{height:auto;min-height:297mm;overflow:visible;display:block}
+.phead{height:30mm;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+.phead h1{margin:0;font-size:19pt;line-height:1.1;text-align:center}
+.phead .pl{display:flex;justify-content:space-between;gap:6mm;font-size:11pt;align-items:flex-end}
+.phead .pl.one{justify-content:center}
+.phead p{margin:0;font-size:9pt;text-align:center;line-height:1.25}
+.ln{display:inline-block;border-bottom:.3mm solid #000;height:1em;vertical-align:baseline}
+.ln.a{width:52mm}.ln.b{width:38mm}.ln.c{width:24mm}
+.gridwrap{height:198mm;display:flex;justify-content:center;align-items:flex-start}
+.sgrid{display:grid;border-top:.3mm solid #222;border-left:.3mm solid #222}
+.cell{display:flex;align-items:center;justify-content:center;border-right:.3mm solid #222;border-bottom:.3mm solid #222;background:#fff;position:relative;font-size:var(--fs);overflow:visible}
+.cell.blank{background:#000}
+.cell .mk{position:absolute;left:.6mm;top:.2mm;font-size:6pt;font-weight:700;line-height:1}
+.cell .ans{font-size:var(--afs)}
+.pkey{height:36mm;overflow:hidden;border-top:.3mm solid #000;padding-top:1.5mm;display:flex;flex-direction:column;gap:1.5mm}
+.pkey h2{margin:0;font-size:10pt}
+.kitems{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5mm 4mm;align-content:start}
+.kitem{display:flex;align-items:center;gap:2mm;font-size:9.5pt;min-width:0}
+.kitem .ksw{flex:none;width:8mm;height:8mm;border:.3mm solid #000;display:grid;place-items:center;font-weight:700;font-size:10pt}
+.kitem .kn{font-weight:650}
+.kitem .kr{display:inline-flex;align-items:center;gap:1.2mm;font-size:8.5pt;white-space:nowrap}
+.pfoot{height:6mm;font-size:8pt;color:#333;display:flex;justify-content:space-between;align-items:flex-end}
+.pat0{background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.38) 0 .35mm,transparent .35mm 1.5mm)}
+.pat1{background-image:repeating-linear-gradient(-45deg,rgba(0,0,0,.38) 0 .35mm,transparent .35mm 1.5mm)}
+.pat2{background-image:radial-gradient(circle,rgba(0,0,0,.45) 0 .32mm,transparent .38mm);background-size:1.7mm 1.7mm}
+.pat3{background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.38) 0 .3mm,transparent .3mm 1.4mm)}
+.pat4{background-image:repeating-linear-gradient(90deg,rgba(0,0,0,.38) 0 .3mm,transparent .3mm 1.4mm)}
+.pat5{background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.35) 0 .25mm,transparent .25mm 1.5mm),repeating-linear-gradient(90deg,rgba(0,0,0,.35) 0 .25mm,transparent .25mm 1.5mm)}
+.alist{columns:2;column-gap:8mm;font-size:8.5pt;line-height:1.35}
+.alist div{break-inside:avoid;display:flex;gap:1.6mm;align-items:center;white-space:nowrap}
+.alist .sq{display:inline-block;width:2.6mm;height:2.6mm;border:.2mm solid #000;flex:none}
+.alist .rc{color:#444;min-width:12mm}
+.flow h1{margin:0 0 1mm;font-size:16pt}
+.flow p{margin:0 0 4mm;font-size:9pt;color:#333}
+
+#printArea{display:none}
+@media (max-width:900px){.shell{grid-template-columns:1fr}}
+@media print{
+  @page{size:A4 portrait;margin:10mm}
+  html,body{background:#fff}
+  #app{display:none!important}
+  #printArea{display:block}
+  .page{width:190mm;height:276mm;padding:0;box-shadow:none;break-inside:avoid}
+  .page.flow{height:auto;min-height:0}
+  .page+.page{break-before:page}
+}
+</style>
+</head>
+<body>
+<div id="app">
+<header class="top">
+  <h1>Mystery Pixel Fraction Puzzle Generator</h1>
+  <ol class="steps" aria-label="Steps">
+    <li><a href="#s1"><b>1</b>Upload</a></li>
+    <li><a href="#s2"><b>2</b>Grid</a></li>
+    <li><a href="#s3"><b>3</b>Questions</a></li>
+    <li><a href="#s5"><b>4</b>Generate</a></li>
+    <li><a href="#s5"><b>5</b>Export</a></li>
+  </ol>
+</header>
+
+<div class="shell">
+<aside class="panel" id="panel" aria-label="Settings">
+
+  <details class="card" id="s1" open>
+    <summary><span class="num">1</span>Upload a picture</summary>
+    <div class="body">
+      <fieldset id="fs1" class="grp">
+        <label class="drop" id="drop" for="file" tabindex="-1">
+          <strong>Drop a PNG, JPG or WebP here</strong>
+          <span>or click to choose a file</span>
+        </label>
+        <input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+        <div class="status" id="fileMsg" role="status" aria-live="polite">No picture yet.</div>
+        <div class="row"><span class="hint">No picture handy?</span>
+          <button class="btn sm" data-sample="heart" type="button">Heart</button>
+          <button class="btn sm" data-sample="smiley" type="button">Smiley</button>
+          <button class="btn sm" data-sample="star" type="button">Star</button>
+        </div>
+        <div class="grp">
+          <span class="hint" style="color:var(--ink)">Fit to the grid</span>
+          <div class="seg" role="radiogroup" aria-label="Fit or crop">
+            <label><input type="radio" name="fit" value="fit" data-k="fit" data-aff="3"><span>Fit whole picture</span></label>
+            <label><input type="radio" name="fit" value="crop" data-k="fit" data-aff="3"><span>Crop to fill</span></label>
+          </div>
+        </div>
+        <label>Posterize (colour levels per channel, 0 = off)
+          <div class="rn"><input type="range" min="0" max="8" step="1" data-k="posterize" data-aff="2" data-t="int" aria-label="Posterize"><input type="number" min="0" max="8" step="1" data-k="posterize" data-aff="2" data-t="int" aria-label="Posterize value"></div>
+        </label>
+        <label>Contrast
+          <div class="rn"><input type="range" min="-50" max="100" step="5" data-k="contrast" data-aff="2" data-t="int" aria-label="Contrast"><input type="number" min="-50" max="100" step="5" data-k="contrast" data-aff="2" data-t="int" aria-label="Contrast value"></div>
+        </label>
+        <p class="hint">Tip: simple pictures with strong, flat colours work best. Photos with lots of detail turn muddy.</p>
+      </fieldset>
+    </div>
+  </details>
+
+  <details class="card" id="s2" open>
+    <summary><span class="num">2</span>Set the grid</summary>
+    <div class="body">
+      <fieldset id="fs2" class="grp">
+        <div class="grp2">
+          <label>Rows (5–30)<div class="rn"><input type="range" min="5" max="30" data-k="rows" data-aff="3" data-t="int" aria-label="Rows"><input type="number" min="5" max="30" data-k="rows" data-aff="3" data-t="int" aria-label="Rows value"></div></label>
+          <label>Columns (5–30)<div class="rn"><input type="range" min="5" max="30" data-k="cols" data-aff="3" data-t="int" aria-label="Columns"><input type="number" min="5" max="30" data-k="cols" data-aff="3" data-t="int" aria-label="Columns value"></div></label>
+        </div>
+        <label>Colors (2–6)<div class="rn"><input type="range" min="2" max="6" data-k="k" data-aff="2" data-t="int" aria-label="Colors"><input type="number" min="2" max="6" data-k="k" data-aff="2" data-t="int" aria-label="Colors value"></div></label>
+        <div class="row">
+          <div class="seg" role="radiogroup" aria-label="Colour source">
+            <label><input type="radio" name="pm" value="auto" data-k="paletteMode" data-aff="2"><span>Auto-pick from image</span></label>
+            <label><input type="radio" name="pm" value="manual" data-k="paletteMode" data-aff="2"><span>Choose by hand</span></label>
+          </div>
+          <button class="btn sm" type="button" id="repick">Re-pick</button>
+        </div>
+        <label class="chk"><input type="checkbox" data-k="blankTransparent" data-aff="2"> Transparent pixels are blank (black)</label>
+        <label class="chk"><input type="checkbox" data-k="blankWhite" data-aff="2"> Near-white pixels are blank (black)</label>
+        <label>Near-white threshold
+          <div class="rn"><input type="range" min="200" max="255" data-k="whiteThreshold" data-aff="2" data-t="int" aria-label="White threshold"><input type="number" min="200" max="255" data-k="whiteThreshold" data-aff="2" data-t="int" aria-label="White threshold value"></div>
+        </label>
+        <label class="chk"><input type="checkbox" data-k="repaint" data-aff="0"> Repaint: click or drag on the picture to change cells</label>
+        <div class="row"><button class="btn sm" type="button" id="undoPaint">Undo all repaints</button><span class="hint" id="paintCount"></span></div>
+      </fieldset>
+    </div>
+  </details>
+
+  <details class="card" id="s3" open>
+    <summary><span class="num">3</span>Set the questions</summary>
+    <div class="body">
+      <label>Question type
+        <select data-k="op" data-aff="1"><option value="add">Addition</option><option value="sub">Subtraction</option><option value="mixed">Mixed addition and subtraction</option></select>
+      </label>
+      <label id="shareRow">Share of addition problems
+        <div class="rn"><input type="range" min="0" max="100" step="5" data-k="addShare" data-aff="1" data-t="int" aria-label="Addition share"><input type="number" min="0" max="100" step="5" data-k="addShare" data-aff="1" data-t="int" aria-label="Addition share value"></div>
+      </label>
+      <label>Allowed denominators
+        <input type="text" data-k="densText" data-aff="1" data-t="str" inputmode="numeric" autocomplete="off" aria-describedby="densHint">
+      </label>
+      <div class="chips" id="densPresets" aria-label="Denominator presets"></div>
+      <p class="hint" id="densHint">Whole numbers from 2 up, separated by commas.</p>
+      <div class="grp2">
+        <label>Fraction pairs
+          <select data-k="pairType" data-aff="1"><option value="unlike">Unlike denominators</option><option value="like">Like denominators</option><option value="both">Like or unlike</option></select>
+        </label>
+        <label>Key denominator
+          <input type="number" min="2" max="1000" data-k="keyDen" data-aff="1" data-t="int">
+        </label>
+      </div>
+      <div class="grp2">
+        <label>Largest answer
+          <select data-k="maxAnswer" data-aff="1" data-t="int"><option value="1">1</option><option value="2">2</option></select>
+        </label>
+        <label>Largest denominator
+          <input type="number" min="2" max="1000" data-k="maxDen" data-aff="1" data-t="int">
+        </label>
+      </div>
+      <div class="grp">
+        <span class="hint" style="color:var(--ink)">Number forms</span>
+        <label class="chk"><input type="checkbox" data-k="forms.proper" data-aff="1"> Proper fractions (3/4)</label>
+        <label class="chk"><input type="checkbox" data-k="forms.improper" data-aff="1"> Improper fractions (7/4)</label>
+        <label class="chk"><input type="checkbox" data-k="forms.mixed" data-aff="1"> Mixed numbers (1 3/4)</label>
+      </div>
+      <label class="chk"><input type="checkbox" data-k="noRepeat" data-aff="1"> No repeated problems</label>
+      <div class="grp">
+        <span class="hint" style="color:var(--ink)">Answer ranges</span>
+        <div class="seg" role="radiogroup" aria-label="Answer ranges">
+          <label><input type="radio" name="bm" value="even" data-k="bandMode" data-aff="1"><span>Even split</span></label>
+          <label><input type="radio" name="bm" value="custom" data-k="bandMode" data-aff="1"><span>Custom boundaries</span></label>
+        </div>
+        <div class="rangeedit" id="rangeEdit"></div>
+      </div>
+      <div class="status" id="cfgNote"></div>
+    </div>
+  </details>
+
+  <details class="card" id="s4" open>
+    <summary><span class="num">4</span>Sheet options</summary>
+    <div class="body">
+      <label>Title <input type="text" id="titleIn" data-k="title" data-aff="0" data-t="str" maxlength="80" autocomplete="off"></label>
+      <label class="chk"><input type="checkbox" data-k="nameDate" data-aff="0"> Name and date lines</label>
+      <div class="grp2">
+        <label>Fraction style
+          <select data-k="fracStyle" data-aff="0"><option value="stacked">Stacked</option><option value="slash">Slash</option></select>
+        </label>
+        <label>Marks beside colors
+          <select data-k="marks" data-aff="0"><option value="none">None</option><option value="letters">Letters</option><option value="patterns">Patterns</option></select>
+        </label>
+      </div>
+      <label>Seed
+        <div class="row"><input type="text" data-k="seed" data-aff="1" data-t="str" maxlength="40" style="flex:1 1 120px;width:auto" autocomplete="off"><button class="btn sm" type="button" id="regenSm">New seed</button></div>
+      </label>
+      <label class="chk"><input type="checkbox" data-k="showAnswers" data-aff="0"> Show each answer in its cell on the key</label>
+    </div>
+  </details>
+
+  <details class="card"><summary><span class="num">✓</span>Check the engine</summary><div class="body">
+    <div>
+      <p class="hint">Builds 10,000 random puzzles and re-checks every answer with exact whole-number arithmetic.</p>
+      <div class="grp" style="margin-top:8px">
+        <button class="btn sm" type="button" id="selfTest">Run self-test (10,000 random puzzles)</button>
+        <div class="stbar"><i id="stBar"></i></div>
+        <div class="status" id="stOut" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+  </div></details>
+</aside>
+
+<main class="stage">
+  <div class="exp" id="s5" role="region" aria-label="Generate and export">
+    <div class="btnrow">
+      <button class="btn primary" type="button" id="gen">Generate</button>
+      <button class="btn" type="button" id="regen" title="New problems, same picture">Regenerate</button>
+    </div>
+    <div class="btnrow" role="group" aria-label="Export">
+      <button class="btn" type="button" id="pStudent">Print student sheet</button>
+      <button class="btn" type="button" id="pKey">Print answer key</button>
+      <button class="btn" type="button" id="pBoth">Print both</button>
+      <button class="btn" type="button" id="pList">Print answer list</button>
+      <button class="btn" type="button" id="csv">Answer list CSV</button>
+    </div>
+    <div class="btnrow">
+      <button class="btn" type="button" id="saveJson">Save settings</button>
+      <button class="btn" type="button" id="loadJson">Load settings</button>
+      <input type="file" id="jsonFile" accept="application/json,.json" hidden>
+    </div>
+    <p class="hint">In the print dialog choose “Save as PDF”, A4, portrait, margins “Default”, and turn on “Background graphics”.</p>
+  </div>
+  <div class="notes" id="notes" aria-live="polite"></div>
+  <div>
+    <div class="tabs" role="tablist" aria-label="Preview">
+      <button role="tab" id="tab-pic" aria-controls="pv" aria-selected="true" data-tab="pic">Picture</button>
+      <button role="tab" id="tab-stu" aria-controls="pv" aria-selected="false" data-tab="stu">Student sheet</button>
+      <button role="tab" id="tab-key" aria-controls="pv" aria-selected="false" data-tab="key">Answer key</button>
+      <button role="tab" id="tab-lst" aria-controls="pv" aria-selected="false" data-tab="lst">Answer list</button>
+      <span class="sp"></span>
+      <button class="lockb" id="lockBtn" type="button" aria-pressed="false" title="Freeze the picture while the questions change">🔓 Picture unlocked</button>
+    </div>
+    <div class="pvpane" id="pv" role="tabpanel" aria-labelledby="tab-pic"></div>
+  </div>
+</main>
+</div>
+</div>
+<div id="printArea" aria-hidden="true"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   Mystery Pixel Fraction Puzzle Generator — single file, no server.
+   Sections: utils · random · colour · engine (exact integer maths) ·
+   state · picture pipeline · sheet rendering · UI · export · self-test
+   ===================================================================== */
+
+/* ---------- utils ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const gcd = (a, b) => { while (b) { [a, b] = [b, a % b]; } return a; };
+const lcm = (a, b) => a / gcd(a, b) * b;
+const hex2 = v => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, '0');
+const toHex = c => '#' + hex2(c[0]) + hex2(c[1]) + hex2(c[2]);
+const fromHex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+
+/* ---------- seeded random ---------- */
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = h << 13 | h >>> 19; }
+  return () => { h = Math.imul(h ^ h >>> 16, 2246822507); h = Math.imul(h ^ h >>> 13, 3266489909); return (h ^= h >>> 16) >>> 0; };
+}
+function makeRng(seed) {
+  let a = xmur3(String(seed))();
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const newSeed = () => String(Math.floor(Math.random() * 900000) + 100000);
+
+/* ---------- colour ---------- */
+function rgb2lab(r, g, b) {
+  const f = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const R = f(r), G = f(g), B = f(b);
+  const X = (R * 0.4124564 + G * 0.3575761 + B * 0.1804375) / 0.95047;
+  const Y = R * 0.2126729 + G * 0.7151522 + B * 0.0721750;
+  const Z = (R * 0.0193339 + G * 0.1191920 + B * 0.9503041) / 1.08883;
+  const h = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+  const fx = h(X), fy = h(Y), fz = h(Z);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+const d2 = (a, b) => { const x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2]; return x * x + y * y + z * z; };
+const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+const inkFor = c => lum(c) > 0.4 ? '#000' : '#fff';
+const NAMED = [
+  ['Red',[220,40,40]],['Orange',[245,130,30]],['Yellow',[250,220,40]],['Lime',[160,210,50]],['Green',[40,160,70]],
+  ['Dark green',[20,100,50]],['Teal',[20,150,150]],['Sky blue',[110,190,240]],['Blue',[40,90,200]],['Navy',[20,40,110]],
+  ['Purple',[130,60,170]],['Pink',[245,140,190]],['Magenta',[200,40,150]],['Brown',[130,80,40]],['Tan',[210,180,130]],
+  ['Peach',[250,200,170]],['Maroon',[130,25,40]],['Gray',[140,140,140]],['Light gray',[210,210,210]],['Charcoal',[55,55,60]],['White',[250,250,250]]
+].map(([n, c]) => ({ n, c, lab: rgb2lab(...c) }));
+function nameColors(pal) {
+  const used = {};
+  return pal.map(c => {
+    const lab = rgb2lab(...c); let best = NAMED[0], bd = Infinity;
+    for (const x of NAMED) { const d = d2(lab, x.lab); if (d < bd) { bd = d; best = x; } }
+    used[best.n] = (used[best.n] || 0) + 1;
+    return used[best.n] > 1 ? `${best.n} ${used[best.n]}` : best.n;
+  });
+}
+const FALLBACK = [[220,40,40],[40,90,200],[250,220,40],[40,160,70],[130,60,170],[245,130,30],[245,140,190],[20,150,150],[130,80,40]];
+
+/* =====================================================================
+   ENGINE — everything below works on whole numbers only.
+   A "value problem" is {op, a, da, b, db}: a/da (op) b/db. da === 1 means
+   the first operand is a plain whole number (subtraction only).
+   ===================================================================== */
+const DEFAULTS = {
+  rows: 10, cols: 10, fit: 'fit', k: 4, paletteMode: 'auto', manualColors: [],
+  blankTransparent: true, blankWhite: true, whiteThreshold: 240, posterize: 0, contrast: 0, repaint: true,
+  keyDen: 100, maxAnswer: 2, bandMode: 'even', bandUpper: [], bandTotal: 0,
+  op: 'add', addShare: 50, densText: '10, 100', pairType: 'unlike', maxDen: 100,
+  forms: { proper: true, improper: true, mixed: true }, noRepeat: true,
+  title: '', nameDate: true, fracStyle: 'stacked', marks: 'none', showAnswers: false, seed: ''
+};
+
+function parseDens(text) {
+  const set = new Set(String(text).split(/[^0-9]+/).filter(Boolean).map(Number));
+  return [...set].filter(n => n >= 2 && n <= 1000).sort((a, b) => a - b);
+}
+function evenBands(total, k) {
+  const out = []; let lo = 1;
+  for (let i = 0; i < k; i++) { const hi = i === k - 1 ? total : Math.round(total * (i + 1) / k); out.push({ lo, hi }); lo = hi + 1; }
+  return out;
+}
+let enumCache = { sig: '', map: new Map() };
+
+/* Build the effective configuration the engine uses. Never throws. */
+function deriveConfig(s, k) {
+  const errors = [], notes = [];
+  const dens = parseDens(s.densText).filter(d => d <= s.maxDen);
+  const forms = { proper: !!s.forms.proper, improper: !!s.forms.improper, mixed: !!s.forms.mixed };
+  if (!parseDens(s.densText).length) errors.push('Enter at least one allowed denominator (a whole number from 2 up).');
+  else if (!dens.length) errors.push('Every allowed denominator is above the largest allowed denominator.');
+  if (!forms.proper && !forms.improper && !forms.mixed) errors.push('Choose at least one number form.');
+  const L = s.maxAnswer === 1 ? 1 : 2;
+  let D = clamp(Math.round(Number(s.keyDen)) || 100, 2, 1000);
+  if (dens.length) {
+    const dl = dens.reduce((a, d) => lcm(a, d), 1);
+    if (D % dl !== 0) { const nd = lcm(D, dl); notes.push(`Key denominator changed from ${D} to ${nd} so that every allowed denominator divides it.`); D = nd; }
+  }
+  if (D * L > 2400) errors.push(`The key denominator would be ${D}, which is too large. Pick denominators that share a smaller multiple.`);
+  const total = D * L;
+  let bands = evenBands(total, k);
+  if (total < k) errors.push('The key denominator is too small for that many colors.');
+  if (s.bandMode === 'custom') {
+    const u = s.bandUpper;
+    let ok = Array.isArray(u) && u.length === k - 1 && u.every(Number.isInteger);
+    if (ok) for (let i = 0; i < u.length; i++) { if (u[i] < (i ? u[i - 1] + 1 : 1) || u[i] > total - (k - 1 - i)) ok = false; }
+    if (ok) { bands = []; let lo = 1; for (let i = 0; i < k; i++) { const hi = i === k - 1 ? total : u[i]; bands.push({ lo, hi }); lo = hi + 1; } }
+    else errors.push('Answer ranges must be whole numbers that increase from one color to the next, leaving at least 1 for every color.');
+  }
+  const ops = s.op === 'add' ? ['+'] : s.op === 'sub' ? ['-'] : ['+', '-'];
+  const sig = [dens.join(','), D, L, forms.proper, forms.improper, forms.mixed, s.pairType].join('|');
+  if (enumCache.sig !== sig) enumCache = { sig, map: new Map() };
+  return { errors, notes, dens, forms, L, D, total, bands, ops, pairType: s.pairType, addShare: clamp(Number(s.addShare) || 0, 0, 100),
+    limit: s.noRepeat ? 1 : Infinity, cache: enumCache.map };
+}
+
+const validOperand = (n, d, f) => n % d !== 0 && (n < d ? f.proper : (f.improper || f.mixed));
+const pairOK = (d1, d2, pt) => pt === 'both' || (pt === 'like' ? d1 === d2 : d1 !== d2);
+
+/* Every value problem with exact answer T/D, in a deterministic order. */
+function problemsFor(cfg, op, T) {
+  const key = op + T; let list = cfg.cache.get(key);
+  if (list) return list;
+  list = [];
+  const { dens, D, L, total, forms, pairType } = cfg;
+  if (op === '+') {
+    for (let i = 0; i < dens.length; i++) {
+      const d1 = dens[i], m1 = D / d1;
+      for (let j = i; j < dens.length; j++) {
+        const d2 = dens[j], m2 = D / d2;
+        if (!pairOK(d1, d2, pairType)) continue;
+        for (let a = 1; a * m1 < T; a++) {
+          const rem = T - a * m1;
+          if (rem < m2) break;
+          if (rem % m2) continue;
+          const b = rem / m2;
+          if (i === j && a > b) continue;               // a+b and b+a are the same problem
+          if (!validOperand(a, d1, forms) || !validOperand(b, d2, forms)) continue;
+          list.push({ op, a, da: d1, b, db: d2 });
+        }
+      }
+    }
+  } else {
+    for (let i = 0; i < dens.length; i++) {
+      const d1 = dens[i], m1 = D / d1;
+      for (let M = Math.floor(T / m1) + 1; M * m1 <= total; M++) {
+        if (M % d1 === 0 || !validOperand(M, d1, forms)) continue;
+        const diff = M * m1 - T;
+        for (let j = 0; j < dens.length; j++) {
+          const d2 = dens[j], m2 = D / d2;
+          if (!pairOK(d1, d2, pairType) || diff % m2) continue;
+          const b = diff / m2;
+          if (validOperand(b, d2, forms)) list.push({ op, a: M, da: d1, b, db: d2 });
+        }
+      }
+    }
+    if (pairType === 'both' && (forms.improper || forms.mixed)) {
+      for (let w = 1; w <= L; w++) {
+        if (w * D <= T) continue;
+        const diff = w * D - T;
+        for (const d2 of dens) {
+          const m2 = D / d2;
+          if (diff % m2) continue;
+          const b = diff / m2;
+          if (validOperand(b, d2, forms)) list.push({ op, a: w, da: 1, b, db: d2 });
+        }
+      }
+    }
+  }
+  cfg.cache.set(key, list);
+  return list;
+}
+const pkey = p => p.op === '+' ? '+|' + [p.a + '/' + p.da, p.b + '/' + p.db].sort().join('|') : '-|' + p.a + '/' + p.da + '|' + p.b + '/' + p.db;
+
+/* Write an operand in one of the number forms the teacher allows. */
+function reprOperand(n, d, rnd, forms) {
+  if (d === 1) return { w: n, n: 0, d: 1 };
+  if (n < d) return { w: 0, n, d };
+  const opts = []; if (forms.improper) opts.push('i'); if (forms.mixed) opts.push('m');
+  const f = opts[Math.floor(rnd() * opts.length)];
+  return f === 'i' ? { w: 0, n, d } : { w: Math.floor(n / d), n: n % d, d };
+}
+
+/* Independent check: works only from what is printed on the sheet. */
+function operandValue(o, cfg, first, op) {
+  if (!o || ![o.w, o.n, o.d].every(Number.isInteger) || o.w < 0 || o.n < 0 || o.d < 1) return null;
+  const f = cfg.forms;
+  if (o.n === 0) {                                              // plain whole number
+    if (!(op === '-' && first && o.d === 1 && o.w >= 1 && o.w <= cfg.L && cfg.pairType === 'both' && (f.improper || f.mixed))) return null;
+    return { num: o.w, den: 1, d: 1 };
+  }
+  if (!cfg.dens.includes(o.d)) return null;
+  if (o.w > 0) { if (!(f.mixed && o.n < o.d)) return null; }
+  else if (o.n < o.d) { if (!f.proper) return null; }
+  else if (o.n > o.d && o.n % o.d !== 0) { if (!f.improper) return null; }
+  else return null;
+  return { num: o.w * o.d + o.n, den: o.d, d: o.d };
+}
+function verifyCell(cell, cfg) {
+  const p = cell.prob, band = cfg.bands[cell.band], T = cell.T;
+  if (!p || !band || !Number.isInteger(T) || T < band.lo || T > band.hi || T < 1) return false;
+  if (cfg.ops.indexOf(p.op) < 0) return false;
+  const x = operandValue(p.x, cfg, true, p.op), y = operandValue(p.y, cfg, false, p.op);
+  if (!x || !y) return false;
+  if (x.d !== 1 && !pairOK(x.d, y.d, cfg.pairType)) return false;
+  let num;
+  if (p.op === '+') num = x.num * y.den + y.num * x.den;
+  else { if (x.num > cfg.L * x.den) return false; num = x.num * y.den - y.num * x.den; if (num <= 0) return false; }
+  return num * cfg.D === T * x.den * y.den;                     // exact cross-multiplication, no decimals
+}
+
+/* Generate the whole puzzle. idx[i] = band/color index, or -1 for a blank cell. */
+function buildPuzzle(idx, cfg, seed) {
+  const rng = makeRng(seed);
+  const n = idx.length, cells = new Array(n), state = [];
+  const used = new Map();
+  let repeats = 0, discards = 0;
+  const failed = new Set();
+  const opOrder = () => cfg.ops.length === 1 ? cfg.ops : (rng() * 100 < cfg.addShare ? ['+', '-'] : ['-', '+']);
+  const render = (p) => {
+    let x = reprOperand(p.a, p.da, rng, cfg.forms), y = reprOperand(p.b, p.db, rng, cfg.forms);
+    if (p.op === '+' && rng() < 0.5) { const t = x; x = y; y = t; }
+    return { op: p.op, x, y };
+  };
+  for (let i = 0; i < n; i++) {
+    const ci = idx[i];
+    if (ci < 0) { cells[i] = { blank: true }; continue; }
+    const band = cfg.bands[ci];
+    if (!band) { failed.add(ci); continue; }
+    let st = state[ci];
+    if (!st) st = state[ci] = { pool: Array.from({ length: band.hi - band.lo + 1 }, (_, j) => band.lo + j) };
+    let done = null;
+    for (let attempt = 0; attempt < 40 && !done; attempt++) {
+      let pick = null, T = 0, reused = false;
+      while (!pick && st.pool.length) {
+        const pi = Math.floor(rng() * st.pool.length); T = st.pool[pi];
+        for (const op of opOrder()) {
+          const free = problemsFor(cfg, op, T).filter(p => (used.get(pkey(p)) || 0) < cfg.limit);
+          if (free.length) { pick = free[Math.floor(rng() * free.length)]; break; }
+        }
+        if (!pick) { st.pool[pi] = st.pool[st.pool.length - 1]; st.pool.pop(); }
+      }
+      if (!pick) {                                              // every problem in the band is used up: allow a repeat
+        const ts = [];
+        for (let t = band.lo; t <= band.hi; t++) for (const op of cfg.ops) if (problemsFor(cfg, op, t).length) { ts.push(t); break; }
+        if (!ts.length) break;
+        T = ts[Math.floor(rng() * ts.length)];
+        const all = []; for (const op of cfg.ops) all.push(...problemsFor(cfg, op, T));
+        pick = all[Math.floor(rng() * all.length)]; reused = true;
+      }
+      const cell = { r: 0, c: 0, band: ci, T, prob: render(pick), repeat: reused };
+      if (verifyCell(cell, cfg)) { used.set(pkey(pick), (used.get(pkey(pick)) || 0) + 1); done = cell; if (reused) repeats++; }
+      else discards++;                                          // mismatch: discard and retry
+    }
+    if (!done) { failed.add(ci); continue; }
+    cells[i] = done;
+  }
+  return { ok: failed.size === 0, failedBands: [...failed], cells, repeats, discards };
+}
+
+const SYM = { '+': '+', '-': '−' };
+function opText(o) { return o.n === 0 ? String(o.w) : (o.w ? `${o.w} ${o.n}/${o.d}` : `${o.n}/${o.d}`); }
+const probText = p => `${opText(p.x)} ${SYM[p.op]} ${opText(p.y)}`;
+
+/* Per-band problem counts (time-boxed so the page never freezes). */
+function analyze(idx, cfg) {
+  const k = cfg.bands.length, per = new Array(k).fill(0);
+  idx.forEach(v => { if (v >= 0 && v < k) per[v]++; });
+  const t0 = performance.now(); let timedOut = false;
+  return per.map((cells, i) => {
+    if (!cells || timedOut) return { cells, count: null };
+    let cnt = 0; const b = cfg.bands[i];
+    for (let T = b.lo; T <= b.hi; T++) {
+      for (const op of cfg.ops) cnt += problemsFor(cfg, op, T).length;
+      if (performance.now() - t0 > 500) { timedOut = true; break; }
+    }
+    return { cells, count: timedOut ? null : cnt };
+  });
+}
+function countBand(cfg, i) { let c = 0; const b = cfg.bands[i]; for (let T = b.lo; T <= b.hi; T++) for (const op of cfg.ops) c += problemsFor(cfg, op, T).length; return c; }
+function suggestDen(cfg, i, current) {
+  let best = null, bc = current;
+  for (const d of [2,3,4,5,6,8,10,12,15,16,20,25,30,40,50,60,100]) {
+    if (cfg.dens.includes(d) || cfg.D % d !== 0) continue;
+    const v = Object.assign({}, cfg, { dens: [...cfg.dens, d].sort((a, b) => a - b), cache: new Map() });
+    const c = countBand(v, i);
+    if (c > bc) { bc = c; best = d; }
+  }
+  return best ? { den: best, count: bc } : null;
+}
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+let S = JSON.parse(JSON.stringify(DEFAULTS));
+S.seed = newSeed();
+const P = { src: null, srcName: '', sampled: null, palette: [], idx: [], near: [], edits: new Map(), fromFile: false, locked: false, tool: 0, cur: 0, status: '' };
+const Z = { status: 'empty', cfg: null, info: [], result: null, errors: [], notes: [], warnings: [] };
+let tab = 'pic';
+
+function getPath(o, p) { return p.split('.').reduce((a, k) => a[k], o); }
+function setPath(o, p, v) { const ks = p.split('.'); const l = ks.pop(); ks.reduce((a, k) => a[k], o)[l] = v; }
+
+/* =====================================================================
+   PICTURE PIPELINE
+   ===================================================================== */
+function sampleImage(src, rows, cols, fit) {
+  const SUB = 12, W = cols * SUB, H = rows * SUB;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  const iw = src.width, ih = src.height;
+  let sx = 0, sy = 0, sw = iw, sh = ih, dx = 0, dy = 0, dw = W, dh = H;
+  if (fit === 'crop') { const ta = W / H, ia = iw / ih; if (ia > ta) { sw = ih * ta; sx = (iw - sw) / 2; } else { sh = iw / ta; sy = (ih - sh) / 2; } }
+  else { const sc = Math.min(W / iw, H / ih); dw = iw * sc; dh = ih * sc; dx = (W - dw) / 2; dy = (H - dh) / 2; }
+  ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
+  const data = ctx.getImageData(0, 0, W, H).data;
+  const rgb = [], alpha = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    let sr = 0, sg = 0, sb = 0, sa = 0;
+    for (let y = 0; y < SUB; y++) { let p = ((r * SUB + y) * W + c * SUB) * 4; for (let x = 0; x < SUB; x++, p += 4) { const a = data[p + 3]; sr += data[p] * a; sg += data[p + 1] * a; sb += data[p + 2] * a; sa += a; } }
+    alpha.push(sa / (255 * SUB * SUB));
+    rgb.push(sa > 0 ? [sr / sa, sg / sa, sb / sa] : [255, 255, 255]);
+  }
+  return { rgb, alpha };
+}
+
+function kmeans(points, k, rng) {
+  const n = points.length; if (!n) return [];
+  const cents = [points[Math.floor(rng() * n)].lab.slice()];
+  const minD = points.map(p => d2(p.lab, cents[0]));
+  while (cents.length < k) {
+    let sum = 0; for (const v of minD) sum += v;
+    if (sum < 1e-6) break;
+    let r = rng() * sum, pick = n - 1;
+    for (let i = 0; i < n; i++) { r -= minD[i]; if (r <= 0) { pick = i; break; } }
+    cents.push(points[pick].lab.slice());
+    for (let i = 0; i < n; i++) minD[i] = Math.min(minD[i], d2(points[i].lab, cents[cents.length - 1]));
+  }
+  const kk = cents.length, asg = new Array(n).fill(0);
+  for (let it = 0; it < 40; it++) {
+    let moved = false;
+    for (let i = 0; i < n; i++) { let b = 0, bd = Infinity; for (let j = 0; j < kk; j++) { const dd = d2(points[i].lab, cents[j]); if (dd < bd) { bd = dd; b = j; } } if (asg[i] !== b) { asg[i] = b; moved = true; } }
+    const acc = Array.from({ length: kk }, () => [0, 0, 0, 0]);
+    for (let i = 0; i < n; i++) { const a = acc[asg[i]], l = points[i].lab; a[0] += l[0]; a[1] += l[1]; a[2] += l[2]; a[3]++; }
+    for (let j = 0; j < kk; j++) if (acc[j][3]) cents[j] = [acc[j][0] / acc[j][3], acc[j][1] / acc[j][3], acc[j][2] / acc[j][3]];
+    if (!moved) break;
+  }
+  const acc = Array.from({ length: kk }, () => [0, 0, 0, 0]);
+  for (let i = 0; i < n; i++) { const a = acc[asg[i]], c = points[i].rgb; a[0] += c[0]; a[1] += c[1]; a[2] += c[2]; a[3]++; }
+  return acc.filter(a => a[3]).map(a => [a[0] / a[3], a[1] / a[3], a[2] / a[3]]);
+}
+function fillPalette(pal, k) {
+  const out = pal.map(c => c.slice());
+  for (const f of FALLBACK) {
+    if (out.length >= k) break;
+    const lf = rgb2lab(...f);
+    if (out.every(c => d2(rgb2lab(...c), lf) > 400)) out.push(f.slice());
+  }
+  for (let i = 0; out.length < k; i++) out.push(FALLBACK[i % FALLBACK.length].slice());
+  return out.slice(0, k);
+}
+
+function doSample() {
+  if (!P.src) { P.sampled = null; return; }
+  P.sampled = sampleImage(P.src, S.rows, S.cols, S.fit);
+}
+function adjustColor(c) {
+  let o = c.slice();
+  if (S.contrast) { const f = 1 + S.contrast / 100; o = o.map(v => clamp((v - 128) * f + 128, 0, 255)); }
+  if (S.posterize >= 2) { const n = S.posterize; o = o.map(v => Math.round(v / 255 * (n - 1)) / (n - 1) * 255); }
+  return o;
+}
+function doQuant(keepEdits) {
+  const sm = P.sampled; if (!sm) return;
+  const n = S.rows * S.cols, k = S.k;
+  const cols = [], blank = [];
+  for (let i = 0; i < n; i++) {
+    const a = sm.alpha[i], raw = sm.rgb[i];
+    const comp = raw.map(v => v * a + 255 * (1 - a));
+    let b = false;
+    if (S.blankTransparent && a < 0.5) b = true;
+    if (S.blankWhite && Math.min(comp[0], comp[1], comp[2]) >= S.whiteThreshold) b = true;
+    blank.push(b); cols.push(adjustColor(comp));
+  }
+  let pal;
+  if (S.paletteMode === 'manual') {
+    while (S.manualColors.length < k) S.manualColors.push(toHex(FALLBACK[S.manualColors.length % FALLBACK.length]));
+    S.manualColors.length = k;
+    pal = S.manualColors.map(fromHex);
+  } else {
+    const pts = []; for (let i = 0; i < n; i++) if (!blank[i]) pts.push({ rgb: cols[i], lab: rgb2lab(...cols[i]) });
+    pal = fillPalette(kmeans(pts, k, makeRng('palette-' + k)), k);
+    pal.sort((p, q) => rgb2lab(...p)[0] - rgb2lab(...q)[0]);
+  }
+  const labs = pal.map(c => rgb2lab(...c));
+  P.palette = pal;
+  P.near = cols.map(c => { const l = rgb2lab(...c); let b = 0, bd = Infinity; labs.forEach((x, j) => { const dd = d2(l, x); if (dd < bd) { bd = dd; b = j; } }); return b; });
+  P.idx = P.near.map((v, i) => blank[i] ? -1 : v);
+  if (!keepEdits) P.edits.clear();
+  for (const [i, v] of P.edits) if (i < n && v < k) P.idx[i] = v;
+  if (P.tool >= k) P.tool = 0;
+}
+
+/* Re-compute questions, warnings and the puzzle itself. */
+function normalizeBands(cfgTotal, k) {
+  if (S.bandMode !== 'custom') return;
+  const need = k - 1;
+  if (!S.bandUpper || S.bandUpper.length !== need || !S.bandTotal) {
+    S.bandUpper = evenBands(cfgTotal, k).slice(0, need).map(b => b.hi);
+  } else if (S.bandTotal !== cfgTotal) {
+    let prev = 0;
+    S.bandUpper = S.bandUpper.map((u, i) => { let v = Math.round(u * cfgTotal / S.bandTotal); v = clamp(v, prev + 1, cfgTotal - (need - i)); prev = v; return v; });
+  }
+  S.bandTotal = cfgTotal;
+}
+function doPuzzle() {
+  Z.errors = []; Z.notes = []; Z.warnings = []; Z.result = null; Z.info = [];
+  if (!P.idx.length) { Z.status = 'empty'; Z.cfg = null; return; }
+  const k = P.palette.length;
+  let cfg = deriveConfig(S, k);
+  if (S.bandMode === 'custom' && !cfg.errors.length) { normalizeBands(cfg.total, k); cfg = deriveConfig(S, k); }
+  else if (S.bandMode === 'custom') { normalizeBands(S.maxAnswer === 1 ? parseInt(S.keyDen) || 100 : 2 * (parseInt(S.keyDen) || 100), k); }
+  Z.cfg = cfg; Z.notes = cfg.notes.slice();
+  if (cfg.errors.length) { Z.status = 'blocked'; Z.errors = cfg.errors.slice(); return; }
+  if (!parseSeedOK()) { S.seed = newSeed(); }
+  Z.info = analyze(P.idx, cfg);
+  const names = nameColors(P.palette);
+  const blocked = [];
+  Z.info.forEach((inf, i) => {
+    if (!inf.cells) { Z.warnings.push({ lv: 'info', t: `${names[i]} is not used in the picture, so its answer range ${rangeText(cfg.bands[i], cfg.D)} will not appear on the sheet.` }); return; }
+    if (inf.count === null) return;
+    const rt = rangeText(cfg.bands[i], cfg.D);
+    if (inf.count === 0) {
+      const sg = suggestDen(cfg, i, 0);
+      blocked.push(`${names[i]} (${rt}): no valid problem has an answer in this range. ${sg ? `Try adding denominator ${sg.den}.` : 'Allow more denominators, number forms or like/unlike pairs, or change the answer ranges.'}`);
+    } else if (cfg.limit === 1 && inf.count < inf.cells) {
+      const sg = suggestDen(cfg, i, inf.count);
+      Z.warnings.push({ lv: 'warn', t: `${names[i]} (${rt}) has only ${inf.count} different problem${inf.count === 1 ? '' : 's'} for ${inf.cells} cells, so some will repeat. ${sg ? `Adding denominator ${sg.den} would give ${sg.count}.` : 'Add a denominator or allow more number forms.'}` });
+    }
+  });
+  if (blocked.length) { Z.status = 'blocked'; Z.errors = blocked.map(t => 'Cannot build the puzzle. ' + t); return; }
+  const res = buildPuzzle(P.idx, cfg, S.seed);
+  if (!res.ok) {
+    Z.status = 'blocked';
+    Z.errors = res.failedBands.map(i => `Cannot build the puzzle. ${names[i]} (${rangeText(cfg.bands[i], cfg.D)}): no valid problem has an answer in this range. Try adding a denominator.`);
+    return;
+  }
+  const cols = S.cols;
+  res.cells.forEach((c, i) => { if (!c.blank) { c.r = Math.floor(i / cols); c.c = i % cols; } });
+  if (!res.cells.every(c => c.blank || verifyCell(c, cfg))) { Z.status = 'blocked'; Z.errors = ['An answer failed the final check, so nothing was drawn. Please report this.']; return; }
+  Z.result = res; Z.status = 'ok';
+  if (res.repeats) Z.warnings.push({ lv: 'warn', t: `${res.repeats} problem${res.repeats === 1 ? ' was' : 's were'} repeated because a color range ran out of different problems.` });
+}
+const parseSeedOK = () => typeof S.seed === 'string' && S.seed.length > 0;
+const rangeText = (b, D) => `${b.lo}–${b.hi} out of ${D}`;
+
+/* =====================================================================
+   SHEET RENDERING (screen preview and print share the same markup)
+   ===================================================================== */
+const CW = 0.56;
+const emFrac = (n, d, st) => st === 'stacked' ? Math.max(String(n).length, String(d).length) * CW + 0.32 : (String(n).length + String(d).length) * CW + 0.45;
+function emOperand(o, st) { if (o.n === 0) return String(o.w).length * CW; const f = emFrac(o.n, o.d, st); return o.w ? String(o.w).length * CW + 0.22 + f : f; }
+function emProblem(p, st) { const a = emOperand(p.x, st), b = emOperand(p.y, st); return st === 'stacked' ? a + b + 1.2 : Math.max(a, 1.1 + b); }
+const MM = 72 / 25.4;
+
+function fracHTML(n, d) { return `<span class="fr"><span class="n">${n}</span><span class="d">${d}</span></span>`; }
+function operandHTML(o, st) {
+  if (o.n === 0) return `<span class="opd">${o.w}</span>`;
+  if (st === 'slash') return `<span class="opd">${o.w ? o.w + ' ' : ''}${o.n}/${o.d}</span>`;
+  return o.w ? `<span class="opd mx"><span>${o.w}</span>${fracHTML(o.n, o.d)}</span>` : `<span class="opd">${fracHTML(o.n, o.d)}</span>`;
+}
+function probHTML(p, st) {
+  return st === 'stacked'
+    ? `<div class="prob">${operandHTML(p.x, st)}<span class="op">${SYM[p.op]}</span>${operandHTML(p.y, st)}</div>`
+    : `<div class="prob sl"><span>${operandHTML(p.x, st)}</span><span>${SYM[p.op]} ${operandHTML(p.y, st)}</span></div>`;
+}
+function titleText() {
+  if (S.title.trim()) return S.title.trim();
+  const w = S.op === 'add' ? 'Adding' : S.op === 'sub' ? 'Subtracting' : 'Adding and Subtracting';
+  return `${w} ${S.pairType === 'unlike' ? 'with Unlike Fractions' : S.pairType === 'like' ? 'with Like Fractions' : 'Fractions'}`;
+}
+function layoutGrid(st, maxEm, fixedFont) {
+  const W = 190, H = 198;
+  const cell = Math.min(W / S.cols, H / S.rows);
+  const pt = cell * MM, usable = pt - 5;
+  let font = Math.min(14, usable / maxEm, usable / 2.6);
+  if (fixedFont) font = Math.min(font, fixedFont);
+  return { cell, font, tooDense: font < 8, usable };
+}
+function studentLayout() {
+  let maxS = 1, maxL = 1;
+  for (const c of Z.result.cells) if (!c.blank) { maxS = Math.max(maxS, emProblem(c.prob, 'stacked')); maxL = Math.max(maxL, emProblem(c.prob, 'slash')); }
+  const cur = S.fracStyle, other = cur === 'stacked' ? 'slash' : 'stacked';
+  const lay = layoutGrid(cur, cur === 'stacked' ? maxS : maxL);
+  const alt = layoutGrid(other, other === 'stacked' ? maxS : maxL);
+  const maxCols = Math.max(5, Math.floor(190 * MM / (8 * (cur === 'stacked' ? maxS : maxL) + 5)));
+  return { ...lay, fs: Math.max(8, lay.font), altOK: !alt.tooDense, other, maxCols };
+}
+function headerHTML(sub, note) {
+  return `<header class="phead"><h1>${esc(titleText())}${sub ? ' — ' + sub : ''}</h1>
+    <div class="pl ${S.nameDate ? '' : 'one'}"><span>Mystery Puzzle: <i class="ln a"></i></span>${S.nameDate ? '<span>Name: <i class="ln b"></i> &nbsp;Date: <i class="ln c"></i></span>' : ''}</div>
+    <p>${note}</p></header>`;
+}
+function markOf(i) { return S.marks === 'letters' ? 'ABCDEF'[i] : ''; }
+function patClass(i) { return S.marks === 'patterns' ? ' pat' + i : ''; }
+function keyHTML() {
+  const cfg = Z.cfg, names = nameColors(P.palette);
+  const items = cfg.bands.map((b, i) => {
+    const c = P.palette[i];
+    return `<div class="kitem"><span class="ksw${patClass(i)}" style="background:${toHex(c)};color:${inkFor(c)}">${markOf(i)}</span>
+      <span><span class="kn">${esc(names[i])}</span><br><span class="kr">${fracHTML(b.lo, cfg.D)}<span>to</span>${fracHTML(b.hi, cfg.D)}</span></span></div>`;
+  }).join('');
+  return `<div class="pkey"><h2>Color key</h2><div class="kitems">${items}</div></div>`;
+}
+function footHTML() { return `<footer class="pfoot"><span>Seed ${esc(S.seed)} · ${S.rows}×${S.cols} grid · ${P.palette.length} colors</span><span>Mystery Pixel Fraction Puzzle</span></footer>`; }
+function studentPageHTML() {
+  const lay = studentLayout();
+  const cells = Z.result.cells.map(c => c.blank ? '<div class="cell blank"></div>' : `<div class="cell">${probHTML(c.prob, S.fracStyle)}</div>`).join('');
+  return `<section class="page" data-kind="student" style="--fs:${lay.fs.toFixed(2)}pt">
+    ${headerHTML('', 'Solve each problem. Find the answer in the color key, then color the square that color. Blank squares are black.')}
+    <div class="gridwrap"><div class="sgrid" style="grid-template-columns:repeat(${S.cols},${lay.cell.toFixed(3)}mm);grid-auto-rows:${lay.cell.toFixed(3)}mm">${cells}</div></div>
+    ${keyHTML()}${footHTML()}</section>`;
+}
+function keyPageHTML() {
+  const cfg = Z.cfg;
+  let maxEm = 1;
+  for (const c of Z.result.cells) if (!c.blank) maxEm = Math.max(maxEm, emFrac(c.T, cfg.D, 'stacked'));
+  const lay = layoutGrid('stacked', maxEm);
+  const afs = Math.max(5.5, Math.min(11, lay.font));
+  const cells = Z.result.cells.map(c => {
+    if (c.blank) return '<div class="cell blank"></div>';
+    const col = P.palette[c.band], ink = inkFor(col);
+    const ans = S.showAnswers ? `<span class="ans" style="background:${toHex(col)}b3;padding:0 .3mm">${fracHTML(c.T, cfg.D)}</span>` : '';
+    return `<div class="cell${patClass(c.band)}" style="background-color:${toHex(col)};color:${ink}">${S.marks === 'letters' ? `<span class="mk">${markOf(c.band)}</span>` : ''}${ans}</div>`;
+  }).join('');
+  return `<section class="page" data-kind="key" style="--afs:${afs.toFixed(2)}pt">
+    ${headerHTML('Answer Key', 'Teacher copy. Each square shows the color its answer earns. Blank squares stay black.')}
+    <div class="gridwrap"><div class="sgrid" style="grid-template-columns:repeat(${S.cols},${lay.cell.toFixed(3)}mm);grid-auto-rows:${lay.cell.toFixed(3)}mm">${cells}</div></div>
+    ${keyHTML()}${footHTML()}</section>`;
+}
+function listRows() {
+  const cfg = Z.cfg, names = nameColors(P.palette);
+  return Z.result.cells.map((c, i) => {
+    const r = Math.floor(i / S.cols) + 1, cc = i % S.cols + 1;
+    return c.blank
+      ? { r, c: cc, color: 'Blank (black)', hex: '#000000', prob: '', ans: '' }
+      : { r, c: cc, color: names[c.band], hex: toHex(P.palette[c.band]), prob: probText(c.prob), ans: `${c.T}/${cfg.D}` };
+  });
+}
+function listPageHTML() {
+  const rows = listRows();
+  const body = rows.map(x => `<div><span class="rc">R${x.r} C${x.c}</span><span class="sq" style="background:${x.hex}"></span>${x.prob ? `<span>${esc(x.prob)} = <b>${x.ans}</b></span>` : '<span>blank</span>'}</div>`).join('');
+  return `<section class="page flow" data-kind="list"><h1>${esc(titleText())} — Answer List</h1>
+    <p>Every cell by row (R) and column (C), with its answer written over the key denominator ${Z.cfg.D}. Seed ${esc(S.seed)}.</p>
+    <div class="alist">${body}</div></section>`;
+}
+function pagesFor(kind) {
+  if (kind === 'student') return studentPageHTML();
+  if (kind === 'key') return keyPageHTML();
+  if (kind === 'both') return studentPageHTML() + keyPageHTML();
+  return listPageHTML();
+}
+
+/* =====================================================================
+   UI RENDERING
+   ===================================================================== */
+const pvEl = $('#pv'), notesEl = $('#notes');
+
+function renderNotes() {
+  const items = [];
+  const lay = Z.status === 'ok' ? studentLayout() : null;
+  if (P.status) items.push({ lv: 'info', t: P.status });
+  if (P.fromFile) items.push({ lv: 'info', t: 'Picture loaded from a settings file. Upload the image again if you want to change the grid size or colors.' });
+  for (const e of Z.errors) items.push({ lv: 'err', t: e });
+  for (const n of Z.notes) items.push({ lv: 'warn', t: n });
+  for (const w of Z.warnings) items.push(w);
+  if (lay && lay.tooDense) {
+    items.push({ lv: 'warn', t: `Cells are too small for ${S.fracStyle} fractions at the 8 pt minimum. Use ${lay.maxCols} columns or fewer${lay.altOK ? `, or switch to ${lay.other} form` : ''}.` });
+  }
+  if (Z.status === 'ok') {
+    const n = Z.result.cells.filter(c => !c.blank).length;
+    items.push({ lv: 'ok', t: `${n} problem${n === 1 ? '' : 's'} generated. Every exact answer was checked with whole-number arithmetic and falls inside its cell's color range.` });
+    if (Z.result.discards) items.push({ lv: 'info', t: `${Z.result.discards} problem${Z.result.discards === 1 ? '' : 's'} failed the check and ${Z.result.discards === 1 ? 'was' : 'were'} discarded and redrawn.` });
+  }
+  notesEl.innerHTML = items.map(i => `<div class="note ${i.lv}" role="${i.lv === 'err' ? 'alert' : 'note'}">${esc(i.t)}</div>`).join('');
+}
+
+function emptyHTML() {
+  return `<div class="empty"><strong style="color:var(--ink);font-size:17px">Start with a picture</strong>
+    <span>Upload a PNG, JPG or WebP, or try a sample.</span>
+    <div class="btnrow"><button class="btn primary" type="button" data-sample="heart">Try the heart</button><button class="btn" type="button" data-sample="smiley">Smiley</button><button class="btn" type="button" data-sample="star">Star</button></div></div>`;
+}
+function renderPicture() {
+  if (!P.idx.length) { pvEl.innerHTML = emptyHTML(); return; }
+  const names = nameColors(P.palette), n = P.idx.length;
+  const counts = new Array(P.palette.length).fill(0); let blanks = 0;
+  P.idx.forEach(v => v < 0 ? blanks++ : counts[v]++);
+  const cells = P.idx.map((v, i) => v < 0 ? `<div class="pc bl" data-i="${i}"></div>` : `<div class="pc" data-i="${i}" style="background:${toHex(P.palette[v])}"></div>`).join('');
+  const pal = P.palette.map((c, i) => `<div class="palrow${P.tool === i ? ' sel' : ''}" data-tool="${i}">
+      <input type="radio" name="tool" aria-label="Paint with ${esc(names[i])}" ${P.tool === i ? 'checked' : ''} data-tool="${i}">
+      <input type="color" value="${toHex(c)}" data-pcol="${i}" aria-label="Change ${esc(names[i])}" ${P.locked ? 'disabled' : ''}>
+      <span>${esc(names[i])}</span><span class="cnt">${counts[i]}</span></div>`).join('');
+  const blankRow = `<div class="palrow${P.tool === -1 ? ' sel' : ''}" data-tool="-1"><input type="radio" name="tool" aria-label="Paint blank (black)" ${P.tool === -1 ? 'checked' : ''} data-tool="-1"><span class="sw" style="background:#000"></span><span>Blank (black)</span><span class="cnt">${blanks}</span></div>`;
+  pvEl.innerHTML = `<div class="pictop">
+    <div style="flex:1 1 320px;min-width:0"><div class="pgrid${S.repaint && !P.locked ? ' edit' : ''}" id="pgrid" tabindex="0" role="application" aria-label="Picture, ${S.rows} rows by ${S.cols} columns. Arrow keys move, Space paints, B toggles blank."
+      style="grid-template-columns:repeat(${S.cols},1fr);--ar:${S.cols / S.rows}">${cells}</div></div>
+    <div class="side"><div class="hint" style="color:var(--ink)"><b>${S.rows}×${S.cols}</b> grid, ${P.palette.length} colors${P.locked ? ' · locked' : ''}</div>
+      ${P.src ? '<canvas class="thumb" id="thumb" aria-label="Original picture"></canvas>' : ''}
+      <div class="hint">${S.repaint && !P.locked ? 'Pick a paint color, then click or drag on the picture. Right-click a cell to toggle blank.' : (P.locked ? 'The picture is locked. Unlock it to repaint.' : 'Repaint is off.')}</div>
+      <div role="radiogroup" aria-label="Paint tool">${pal}${blankRow}</div></div></div>`;
+  const th = $('#thumb', pvEl);
+  if (th && P.src) { const w = 150, h = Math.max(1, Math.round(w * P.src.height / P.src.width)); th.width = w; th.height = h; th.getContext('2d').drawImage(P.src, 0, 0, w, h); }
+  markCursor();
+  $('#paintCount').textContent = P.edits.size ? `${P.edits.size} cell${P.edits.size === 1 ? '' : 's'} repainted` : '';
+}
+function markCursor() {
+  const g = $('#pgrid'); if (!g) return;
+  $$('.pc.cur', g).forEach(e => e.classList.remove('cur'));
+  if (document.activeElement === g) { const el = g.children[P.cur]; if (el) el.classList.add('cur'); }
+}
+
+function scaledPages(html, container) {
+  container.innerHTML = '<div class="pvpages"></div>';
+  const host = $('.pvpages', container);
+  const avail = Math.max(280, container.clientWidth - 28);
+  const z = Math.min(1, avail / (210 * 96 / 25.4));
+  const tmp = document.createElement('div'); tmp.innerHTML = html;
+  for (const page of Array.from(tmp.children)) {
+    const wrap = document.createElement('div'); wrap.className = 'pvwrap';
+    const inner = document.createElement('div'); inner.style.cssText = `transform:scale(${z});transform-origin:0 0;width:210mm`;
+    inner.appendChild(page); wrap.appendChild(inner); host.appendChild(wrap);
+    wrap.style.width = (inner.offsetWidth * z) + 'px'; wrap.style.height = (inner.offsetHeight * z) + 'px';
+  }
+}
+function renderPreview() {
+  $$('[role=tab]').forEach(t => t.setAttribute('aria-selected', t.dataset.tab === tab ? 'true' : 'false'));
+  pvEl.setAttribute('aria-labelledby', 'tab-' + tab);
+  if (tab === 'pic') { renderPicture(); return; }
+  if (Z.status !== 'ok') {
+    pvEl.innerHTML = P.idx.length ? `<div class="empty"><strong style="color:var(--ink)">No puzzle yet</strong><span>${Z.status === 'blocked' ? 'Fix the problems listed above, then the sheet appears here.' : 'Check your settings.'}</span></div>` : emptyHTML();
+    return;
+  }
+  if (tab === 'lst') {
+    const rows = listRows();
+    pvEl.innerHTML = `<div style="overflow:auto;max-height:78vh"><table class="al"><thead><tr><th>Row</th><th>Col</th><th>Color</th><th>Problem</th><th>Answer</th></tr></thead><tbody>${rows.map(x => `<tr><td>${x.r}</td><td>${x.c}</td><td><span class="sw" style="background:${x.hex};vertical-align:middle"></span> ${esc(x.color)}</td><td>${esc(x.prob)}</td><td>${x.ans}</td></tr>`).join('')}</tbody></table></div>`;
+    return;
+  }
+  scaledPages(tab === 'stu' ? studentPageHTML() : keyPageHTML(), pvEl);
+}
+function renderRanges() {
+  const box = $('#rangeEdit'), cfg = Z.cfg;
+  $('#shareRow').style.display = S.op === 'mixed' ? '' : 'none';
+  if (!cfg || !P.palette.length) { box.innerHTML = '<span class="hint">Upload a picture to see the colors.</span>'; return; }
+  const names = nameColors(P.palette), custom = S.bandMode === 'custom', k = cfg.bands.length;
+  if (custom && cfg.errors.length && S.bandUpper.length !== k - 1) { box.innerHTML = ''; return; }
+  box.innerHTML = cfg.bands.map((b, i) => `<div class="rrow"><span class="sw" style="background:${toHex(P.palette[i])}"></span><span>${esc(names[i])}</span>
+    <span class="hint">${b.lo} to</span>${i === k - 1 || !custom ? `<span>${b.hi}</span>` : `<input type="number" min="1" max="${cfg.total - 1}" value="${S.bandUpper[i]}" data-band="${i}" aria-label="Highest answer for ${esc(names[i])}">`}</div>`).join('')
+    + `<span class="hint">Numbers are numerators over ${cfg.D}${cfg.L === 2 ? ' (answers up to 2)' : ''}.</span>`;
+}
+function renderAll() {
+  renderNotes(); renderRanges(); renderPreview();
+  const ok = Z.status === 'ok';
+  ['pStudent', 'pKey', 'pBoth', 'pList', 'csv', 'gen', 'regen', 'regenSm'].forEach(id => { $('#' + id).disabled = !(id === 'gen' || id.startsWith('regen') ? P.idx.length : ok); });
+  $('#titleIn').placeholder = titleText();
+  $('#lockBtn').setAttribute('aria-pressed', P.locked);
+  $('#lockBtn').textContent = P.locked ? '🔒 Picture locked' : '🔓 Picture unlocked';
+  const lockAll = P.locked;
+  $('#fs1').disabled = lockAll; $('#fs2').disabled = lockAll;
+  $$('[data-pic]').forEach(e => e.disabled = lockAll || P.fromFile);
+  syncInputs();
+}
+function syncInputs() {
+  $$('[data-k]').forEach(el => {
+    if (el === document.activeElement && el.type !== 'radio') return;
+    const v = getPath(S, el.dataset.k);
+    if (el.type === 'radio') el.checked = String(v) === el.value;
+    else if (el.type === 'checkbox') el.checked = !!v;
+    else el.value = v;
+  });
+  const lock = P.locked || P.fromFile;
+  $$('#fs1 [data-k], #fs2 [data-k]').forEach(el => { if (['repaint'].includes(el.dataset.k)) return; el.disabled = lock; });
+  $('#repick').disabled = lock; $('#undoPaint').disabled = P.locked;
+  const rep = $('#fs2 [data-k=repaint]'); if (rep) rep.disabled = P.locked;
+  if (P.fromFile) $('#fs1').disabled = false;
+  $('#fs1 #file').disabled = P.locked;
+  $$('#fs1 [data-sample]').forEach(b => b.disabled = P.locked);
+  $('#drop').style.opacity = P.locked ? .5 : 1;
+}
+
+/* =====================================================================
+   PIPELINE SCHEDULING
+   ===================================================================== */
+let pendingStage = -1, timer = 0;
+function schedule(stage) {
+  P.status = '';
+  pendingStage = Math.max(pendingStage, stage);
+  clearTimeout(timer);
+  timer = setTimeout(flush, 90);
+}
+function flush() {
+  const st = pendingStage; pendingStage = -1; clearTimeout(timer);
+  if (st >= 3 && P.src) { P.edits.clear(); doSample(); }
+  if (st >= 2 && P.src) { if (st === 2) P.edits.clear(); doQuant(st < 2); }
+  if (st >= 1 || st === -1) doPuzzle();
+  if (st === 0 && !Z.cfg) doPuzzle();
+  renderAll();
+}
+function applyNow(stage) { pendingStage = Math.max(pendingStage, stage); flush(); }
+
+/* =====================================================================
+   INPUT HANDLING
+   ===================================================================== */
+function readValue(el) {
+  if (el.type === 'checkbox') return el.checked;
+  if (el.type === 'radio') return el.value;
+  const t = el.dataset.t;
+  if (t === 'int') { const v = parseInt(el.value, 10); return Number.isFinite(v) ? v : null; }
+  if (t === 'str') return el.value;
+  return el.value;
+}
+function onField(e, final) {
+  const el = e.target; if (!el.dataset || !el.dataset.k) return;
+  let v = readValue(el); if (v === null) return;
+  if (typeof v === 'number') {
+    const mn = el.min !== '' ? Number(el.min) : -Infinity, mx = el.max !== '' ? Number(el.max) : Infinity;
+    if (v < mn || v > mx) { if (!final) return; v = clamp(v, mn, mx); el.value = v; }
+  }
+  if (el.dataset.k === 'maxAnswer') v = Number(v);
+  const key = el.dataset.k;
+  if (getPath(S, key) === v && !final) return;
+  if (el.type === 'radio' && !el.checked) return;
+  if (key === 'paletteMode' && v === 'manual' && S.paletteMode !== 'manual') S.manualColors = P.palette.map(toHex);
+  if (key === 'bandMode' && v === 'custom') { S.bandUpper = []; S.bandTotal = 0; }
+  setPath(S, key, v);
+  if (key === 'k' && S.paletteMode === 'manual') { /* quant trims or extends the manual list */ }
+  if (key === 'seed' && !String(v).length) return;
+  schedule(Number(el.dataset.aff));
+}
+$('#panel').addEventListener('input', e => onField(e, false));
+$('#panel').addEventListener('change', e => { if (e.target.dataset && e.target.dataset.k) onField(e, true); });
+$('#panel').addEventListener('change', e => {
+  if (e.target.dataset && e.target.dataset.band !== undefined) {
+    const i = Number(e.target.dataset.band), v = parseInt(e.target.value, 10);
+    if (Number.isFinite(v)) { S.bandUpper[i] = v; schedule(1); }
+  }
+});
+
+/* presets */
+[['{10, 100}', '10, 100'], ['{2, 4, 8}', '2, 4, 8'], ['{3, 6, 12}', '3, 6, 12'], ['{2, 3, 4, 6, 12}', '2, 3, 4, 6, 12'], ['{5, 10, 20}', '5, 10, 20']].forEach(([l, v]) => {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = l;
+  b.addEventListener('click', () => { S.densText = v; const m = Math.max(...parseDens(v)); if (m > S.maxDen) S.maxDen = m; applyNow(1); });
+  $('#densPresets').appendChild(b);
+});
+
+/* tabs */
+$$('[role=tab]').forEach(t => t.addEventListener('click', () => { tab = t.dataset.tab; renderPreview(); }));
+$('.tabs').addEventListener('keydown', e => {
+  const tabs = $$('[role=tab]'), i = tabs.indexOf(document.activeElement);
+  if (i < 0 || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+  const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; n.focus(); n.click();
+});
+window.addEventListener('resize', () => { if (tab === 'stu' || tab === 'key') renderPreview(); });
+
+/* lock / generate */
+$('#lockBtn').addEventListener('click', () => { P.locked = !P.locked; renderAll(); });
+function regenerate() { S.seed = newSeed(); applyNow(1); }
+$('#regen').addEventListener('click', regenerate);
+$('#regenSm').addEventListener('click', regenerate);
+$('#gen').addEventListener('click', () => { applyNow(1); if (tab === 'pic' && Z.status === 'ok') { tab = 'stu'; renderPreview(); } });
+$('#repick').addEventListener('click', () => { S.paletteMode = 'auto'; applyNow(2); });
+$('#undoPaint').addEventListener('click', () => { if (P.src) applyNow(2); else { P.edits.clear(); renderAll(); } });
+
+/* image loading */
+const MAX_BYTES = 30 * 1024 * 1024;
+async function loadFile(file) {
+  const msg = $('#fileMsg'); msg.className = 'status';
+  if (P.locked) { msg.textContent = 'The picture is locked. Unlock it to load a new one.'; msg.className = 'status err'; return; }
+  if (!file) return;
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { msg.textContent = 'That file type is not supported. Use PNG, JPG or WebP.'; msg.className = 'status err'; return; }
+  if (file.size > MAX_BYTES) { msg.textContent = 'That file is larger than 30 MB. Use a smaller picture.'; msg.className = 'status err'; return; }
+  try {
+    let bmp;
+    if (window.createImageBitmap) bmp = await createImageBitmap(file);
+    else bmp = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); });
+    if (!bmp.width || !bmp.height) throw new Error('empty');
+    useSource(bmp, file.name);
+  } catch (err) { msg.textContent = 'That image could not be read. Try another file.'; msg.className = 'status err'; }
+}
+function useSource(src, name) {
+  P.src = src; P.srcName = name; P.fromFile = false;
+  $('#fileMsg').textContent = `${name} (${src.width}×${src.height})`;
+  $('#fileMsg').className = 'status';
+  if (S.paletteMode === 'manual' && !S.manualColors.length) S.manualColors = [];
+  if (tab !== 'pic' && Z.status !== 'ok') tab = 'pic';
+  applyNow(3);
+}
+$('#file').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value = ''; });
+const drop = $('#drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { e.preventDefault(); if (!drop.contains(e.target) && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+/* sample pictures */
+function heartPath(c, cx, cy, s) { c.beginPath(); c.moveTo(cx, cy + s * 0.95); c.bezierCurveTo(cx - s * 1.55, cy - s * 0.1, cx - s * 0.95, cy - s * 1.15, cx, cy - s * 0.45); c.bezierCurveTo(cx + s * 0.95, cy - s * 1.15, cx + s * 1.55, cy - s * 0.1, cx, cy + s * 0.95); c.closePath(); }
+const SAMPLES = {
+  heart(c) { heartPath(c, 100, 98, 86); c.fillStyle = '#a4161a'; c.fill(); heartPath(c, 100, 98, 76); c.fillStyle = '#e63946'; c.fill(); c.fillStyle = '#ffb3c1'; c.beginPath(); c.ellipse(58, 58, 17, 10, -0.7, 0, 7); c.fill(); },
+  smiley(c) { c.fillStyle = '#d97706'; c.beginPath(); c.arc(100, 100, 88, 0, 7); c.fill(); c.fillStyle = '#facc15'; c.beginPath(); c.arc(100, 100, 76, 0, 7); c.fill(); c.fillStyle = '#1f2937'; c.beginPath(); c.arc(72, 82, 11, 0, 7); c.arc(128, 82, 11, 0, 7); c.fill(); c.lineWidth = 9; c.lineCap = 'round'; c.strokeStyle = '#1f2937'; c.beginPath(); c.arc(100, 108, 42, 0.25, Math.PI - 0.25); c.stroke(); c.fillStyle = '#fb7185'; c.beginPath(); c.arc(52, 112, 11, 0, 7); c.arc(148, 112, 11, 0, 7); c.fill(); },
+  star(c) { const star = (r, ir) => { c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? ir : r; c[i ? 'lineTo' : 'moveTo'](100 + rr * Math.cos(a), 108 + rr * Math.sin(a)); } c.closePath(); }; star(94, 40); c.fillStyle = '#ea580c'; c.fill(); star(78, 33); c.fillStyle = '#fbbf24'; c.fill(); star(36, 15); c.fillStyle = '#fde68a'; c.fill(); }
+};
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-sample]'); if (!b || P.locked) return;
+  const cv = document.createElement('canvas'); cv.width = cv.height = 200;
+  SAMPLES[b.dataset.sample](cv.getContext('2d'));
+  useSource(cv, `Sample ${b.dataset.sample}`);
+});
+
+/* picture editor: pointer + keyboard */
+let painting = false, paintedAny = false;
+function cellAt(e) {
+  const g = $('#pgrid'); if (!g) return -1;
+  const r = g.getBoundingClientRect();
+  const c = Math.floor((e.clientX - r.left) / r.width * S.cols), rw = Math.floor((e.clientY - r.top) / r.height * S.rows);
+  return c < 0 || c >= S.cols || rw < 0 || rw >= S.rows ? -1 : rw * S.cols + c;
+}
+function paintCell(i, val) {
+  if (i < 0 || P.idx[i] === val) return;
+  P.idx[i] = val; P.edits.set(i, val); paintedAny = true;
+  const el = $('#pgrid') && $('#pgrid').children[i];
+  if (el) { el.className = 'pc' + (val < 0 ? ' bl' : '') + (el.classList.contains('cur') ? ' cur' : ''); el.style.background = val < 0 ? '' : toHex(P.palette[val]); }
+}
+function finishPaint() {
+  if (!paintedAny) return; paintedAny = false;
+  applyNow(1);
+}
+pvEl.addEventListener('pointerdown', e => {
+  const g = e.target.closest('#pgrid'); if (!g || !S.repaint || P.locked || e.button > 2) return;
+  const i = cellAt(e); if (i < 0) return;
+  e.preventDefault(); g.focus(); P.cur = i;
+  if (e.button === 2) { paintCell(i, P.idx[i] < 0 ? P.near[i] : -1); finishPaint(); return; }
+  painting = true; g.setPointerCapture(e.pointerId); paintCell(i, P.tool);
+});
+pvEl.addEventListener('pointermove', e => { if (painting) paintCell(cellAt(e), P.tool); });
+['pointerup', 'pointercancel'].forEach(ev => pvEl.addEventListener(ev, () => { if (painting) { painting = false; finishPaint(); } }));
+pvEl.addEventListener('contextmenu', e => { if (e.target.closest('#pgrid') && S.repaint && !P.locked) e.preventDefault(); });
+pvEl.addEventListener('keydown', e => {
+  const g = e.target.closest && e.target.closest('#pgrid'); if (!g || !S.repaint || P.locked) return;
+  const m = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (m) { e.preventDefault(); const r = clamp(Math.floor(P.cur / S.cols) + m[1], 0, S.rows - 1), c = clamp(P.cur % S.cols + m[0], 0, S.cols - 1); P.cur = r * S.cols + c; markCursor(); }
+  else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); paintCell(P.cur, P.tool); finishPaint(); $('#pgrid').focus(); }
+  else if (e.key === 'b' || e.key === 'B') { e.preventDefault(); paintCell(P.cur, P.idx[P.cur] < 0 ? P.near[P.cur] : -1); finishPaint(); $('#pgrid').focus(); }
+});
+pvEl.addEventListener('focusin', markCursor); pvEl.addEventListener('focusout', () => setTimeout(markCursor, 0));
+pvEl.addEventListener('click', e => {
+  const r = e.target.closest('[data-tool]');
+  if (r && !e.target.closest('[data-pcol]')) { P.tool = Number(r.dataset.tool); $$('.palrow', pvEl).forEach(x => { x.classList.toggle('sel', Number(x.dataset.tool) === P.tool); x.querySelector('input[type=radio]').checked = Number(x.dataset.tool) === P.tool; }); }
+});
+pvEl.addEventListener('input', e => {
+  const i = e.target.dataset && e.target.dataset.pcol; if (i === undefined || P.locked) return;
+  P.palette[Number(i)] = fromHex(e.target.value);
+  S.paletteMode = 'manual'; S.manualColors = P.palette.map(toHex);
+  const g = $('#pgrid'); if (g) P.idx.forEach((v, j) => { if (v === Number(i)) g.children[j].style.background = e.target.value; });
+  clearTimeout(timer); timer = setTimeout(() => { doPuzzle(); renderNotes(); renderRanges(); syncInputs(); }, 120);
+});
+
+/* =====================================================================
+   EXPORT / IMPORT
+   ===================================================================== */
+function download(name, text, mime) {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function mountPrint(kind) { $('#printArea').innerHTML = pagesFor(kind); }
+function doPrint(kind) { if (Z.status !== 'ok') return; mountPrint(kind); window.print(); }
+$('#pStudent').addEventListener('click', () => doPrint('student'));
+$('#pKey').addEventListener('click', () => doPrint('key'));
+$('#pBoth').addEventListener('click', () => doPrint('both'));
+$('#pList').addEventListener('click', () => doPrint('list'));
+$('#csv').addEventListener('click', () => {
+  if (Z.status !== 'ok') return;
+  const q = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const names = nameColors(P.palette);
+  const lines = [['Row', 'Column', 'Color', 'Mark', 'Problem', 'Answer'].join(',')];
+  Z.result.cells.forEach((c, i) => {
+    const r = Math.floor(i / S.cols) + 1, cc = i % S.cols + 1;
+    lines.push(c.blank ? [r, cc, q('Blank (black)'), '""', '""', '""'].join(',')
+      : [r, cc, q(names[c.band]), q('ABCDEF'[c.band]), q(probText(c.prob).replace('−', '-')), q(`${c.T}/${Z.cfg.D}`)].join(','));
+  });
+  download(`answer-list-seed-${S.seed}.csv`, '﻿' + lines.join('\r\n') + '\r\n', 'text/csv');
+});
+$('#saveJson').addEventListener('click', () => {
+  if (!P.idx.length) { P.status = 'Load a picture before saving settings.'; renderNotes(); return; }
+  const data = {
+    app: 'mystery-pixel-fraction-puzzle', version: 1, settings: S,
+    picture: { rows: S.rows, cols: S.cols, palette: P.palette.map(toHex), cells: Array.from({ length: S.rows }, (_, r) => P.idx.slice(r * S.cols, (r + 1) * S.cols).map(v => v < 0 ? '.' : String(v)).join('')) }
+  };
+  download(`mystery-puzzle-seed-${S.seed}.json`, JSON.stringify(data, null, 2), 'application/json');
+});
+$('#loadJson').addEventListener('click', () => $('#jsonFile').click());
+$('#jsonFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    if (f.size > 2 * 1024 * 1024) throw new Error('size');
+    importSettings(JSON.parse(await f.text()));
+    P.status = `Loaded settings from ${f.name}.`;
+  } catch (err) { P.status = 'That settings file could not be used. It must be a file saved by this tool.'; renderNotes(); return; }
+  tab = 'pic'; applyNow(1);
+});
+function importSettings(raw) {
+  if (!raw || raw.app !== 'mystery-pixel-fraction-puzzle' || !raw.settings || !raw.picture) throw new Error('format');
+  const s = raw.settings, d = JSON.parse(JSON.stringify(DEFAULTS)), pic = raw.picture;
+  const int = (v, a, b, def) => Number.isFinite(Number(v)) ? clamp(Math.round(Number(v)), a, b) : def;
+  const oneOf = (v, list, def) => list.includes(v) ? v : def;
+  const rows = int(pic.rows, 5, 30, NaN), cols = int(pic.cols, 5, 30, NaN);
+  if (!Number.isFinite(rows) || !Number.isFinite(cols) || !Array.isArray(pic.palette) || !Array.isArray(pic.cells)) throw new Error('picture');
+  const k = pic.palette.length;
+  if (k < 2 || k > 6 || !pic.palette.every(h => /^#[0-9a-fA-F]{6}$/.test(h)) || pic.cells.length !== rows) throw new Error('palette');
+  const idx = [];
+  for (const row of pic.cells) {
+    if (typeof row !== 'string' || row.length !== cols) throw new Error('cells');
+    for (const ch of row) { if (ch === '.') idx.push(-1); else if (/^[0-5]$/.test(ch) && Number(ch) < k) idx.push(Number(ch)); else throw new Error('cell'); }
+  }
+  Object.assign(d, {
+    rows, cols, k, fit: oneOf(s.fit, ['fit', 'crop'], d.fit), paletteMode: 'manual', manualColors: pic.palette.map(h => h.toLowerCase()),
+    blankTransparent: !!s.blankTransparent, blankWhite: !!s.blankWhite, whiteThreshold: int(s.whiteThreshold, 200, 255, d.whiteThreshold),
+    posterize: int(s.posterize, 0, 8, 0), contrast: int(s.contrast, -50, 100, 0), repaint: s.repaint !== false,
+    keyDen: int(s.keyDen, 2, 1000, 100), maxAnswer: s.maxAnswer === 1 ? 1 : 2, bandMode: oneOf(s.bandMode, ['even', 'custom'], 'even'),
+    bandUpper: Array.isArray(s.bandUpper) ? s.bandUpper.map(Number).filter(Number.isInteger) : [], bandTotal: int(s.bandTotal, 0, 4000, 0),
+    op: oneOf(s.op, ['add', 'sub', 'mixed'], 'add'), addShare: int(s.addShare, 0, 100, 50), densText: String(s.densText || d.densText).slice(0, 60),
+    pairType: oneOf(s.pairType, ['unlike', 'like', 'both'], 'unlike'), maxDen: int(s.maxDen, 2, 1000, 100),
+    forms: { proper: !!(s.forms && s.forms.proper), improper: !!(s.forms && s.forms.improper), mixed: !!(s.forms && s.forms.mixed) },
+    noRepeat: s.noRepeat !== false, title: String(s.title || '').slice(0, 80), nameDate: s.nameDate !== false,
+    fracStyle: oneOf(s.fracStyle, ['stacked', 'slash'], 'stacked'), marks: oneOf(s.marks, ['none', 'letters', 'patterns'], 'none'),
+    showAnswers: !!s.showAnswers, seed: String(s.seed || newSeed()).slice(0, 40)
+  });
+  S = d;
+  P.src = null; P.sampled = null; P.fromFile = true; P.edits.clear();
+  P.palette = pic.palette.map(fromHex); P.idx = idx; P.near = idx.map((v, i) => v < 0 ? 0 : v); P.tool = 0;
+  $('#fileMsg').textContent = 'Picture restored from settings file.';
+}
+
+/* =====================================================================
+   SELF-TEST: random puzzles, every answer re-checked
+   ===================================================================== */
+async function selfTest(count, progress) {
+  const rnd = makeRng('selftest-' + Date.now());
+  const pick = a => a[Math.floor(rnd() * a.length)];
+  const pools = [[10, 100], [2, 4, 8], [3, 6, 12], [2, 3, 4, 5, 6, 10], [5, 10, 20, 100], [2, 5, 10], [4, 8], [10], [2, 4, 8, 16], [3, 4, 6, 12], [6, 10, 15, 30], [10, 20, 50, 100]];
+  const dens100 = [100, 60, 12, 120, 24, 48, 36, 30, 200];
+  const out = { puzzles: 0, problems: 0, wrong: 0, blocked: 0, invalid: 0, repeatsAllowed: 0, tamperMissed: 0, tamperTried: 0, nondeterministic: 0 };
+  const t0 = performance.now();
+  for (let n = 0; n < count * 6 && out.puzzles - out.blocked < count; n++) {
+    const s = JSON.parse(JSON.stringify(DEFAULTS));
+    s.densText = pick(pools).join(', '); s.op = pick(['add', 'sub', 'mixed']); s.addShare = Math.floor(rnd() * 21) * 5;
+    s.pairType = pick(['unlike', 'like', 'both']); s.maxAnswer = pick([1, 2]); s.keyDen = pick(dens100);
+    s.forms = { proper: rnd() < 0.8, improper: rnd() < 0.6, mixed: rnd() < 0.6 };
+    if (!s.forms.proper && !s.forms.improper && !s.forms.mixed) s.forms.proper = true;
+    s.noRepeat = rnd() < 0.6; s.maxDen = pick([100, 100, 100, 12, 20, 8]);
+    const k = 2 + Math.floor(rnd() * 5);
+    let cfg0 = deriveConfig(s, k);
+    if (rnd() < 0.5 && !cfg0.errors.length) {
+      const set = new Set(); while (set.size < k - 1) set.add(1 + Math.floor(rnd() * (cfg0.total - 1)));
+      s.bandMode = 'custom'; s.bandUpper = [...set].sort((a, b) => a - b); s.bandTotal = cfg0.total;
+    }
+    const cfg = deriveConfig(s, k);
+    if (cfg.errors.length) { out.invalid++; continue; }
+    const cells = 25 + Math.floor(rnd() * 60), idx = [];
+    for (let i = 0; i < cells; i++) idx.push(rnd() < 0.15 ? -1 : Math.floor(rnd() * k));
+    const seed = 'T' + n;
+    const res = buildPuzzle(idx, cfg, seed);
+    out.puzzles++;
+    if (!res.ok) {
+      out.blocked++;
+      if (!res.failedBands.every(b => countBand(cfg, b) === 0)) out.wrong++;   // blocked although problems exist
+      continue;
+    }
+    const again = buildPuzzle(idx, cfg, seed);
+    if (JSON.stringify(again.cells) !== JSON.stringify(res.cells)) out.nondeterministic++;
+    out.repeatsAllowed += res.repeats;
+    for (const c of res.cells) {
+      if (c.blank) continue;
+      out.problems++;
+      if (!verifyCell(c, cfg)) out.wrong++;
+      else if (out.tamperTried < 3000 && n % 3 === 0) {                           // the checker must also reject a wrong answer
+        const bad = JSON.parse(JSON.stringify(c)); bad.prob.y.n += 1; out.tamperTried++;
+        if (bad.prob.y.n % bad.prob.y.d !== 0 && verifyCell(bad, cfg)) out.tamperMissed++;
+      }
+    }
+    if (n % 50 === 0) { progress && progress((out.puzzles - out.blocked) / count, out); await new Promise(r => setTimeout(r, 0)); }
+  }
+  out.seconds = (performance.now() - t0) / 1000;
+  progress && progress(1, out);
+  return out;
+}
+$('#selfTest').addEventListener('click', async e => {
+  const btn = e.target; btn.disabled = true;
+  const res = await selfTest(10000, (f, o) => { $('#stBar').style.width = (f * 100) + '%'; $('#stOut').textContent = `${o.puzzles} puzzles checked…`; });
+  $('#stOut').className = 'status' + (res.wrong || res.nondeterministic || res.tamperMissed ? ' err' : '');
+  $('#stOut').textContent = `${res.puzzles - res.blocked} puzzles built and checked (${res.problems} problems) in ${res.seconds.toFixed(1)} s: ${res.wrong} wrong answers, ${res.nondeterministic} seed mismatches, ${res.tamperMissed} of ${res.tamperTried} tampered answers missed. ${res.blocked} other random settings were correctly refused because a color range had no valid problem, and ${res.invalid} were invalid.`;
+  btn.disabled = false;
+});
+
+/* ---------- boot ---------- */
+window.__app = { S: () => S, P, Z, selfTest, mountPrint, deriveConfig, buildPuzzle, verifyCell, problemsFor, applyNow, probText };
+(function boot() {
+  syncInputs();
+  $$('[data-k]').forEach(el => { const k = el.dataset.k; if (['rows','cols','k','fit','paletteMode','blankTransparent','blankWhite','whiteThreshold','posterize','contrast'].includes(k)) el.setAttribute('data-pic', '1'); });
+  flush();
+})();
+</script>
+</body>
+</html>
