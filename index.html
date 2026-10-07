@@ -1227,7 +1227,7 @@ document.addEventListener('click', e => {
 });
 
 /* picture editor: pointer + keyboard */
-let painting = false, paintedAny = false;
+let painting = false, paintedAny = false, lastPaint = -1;
 function cellAt(e) {
   const g = $('#pgrid'); if (!g) return -1;
   const r = g.getBoundingClientRect();
@@ -1249,9 +1249,15 @@ pvEl.addEventListener('pointerdown', e => {
   const i = cellAt(e); if (i < 0) return;
   e.preventDefault(); g.focus(); P.cur = i;
   if (e.button === 2) { paintCell(i, P.idx[i] < 0 ? P.near[i] : -1); finishPaint(); return; }
-  painting = true; g.setPointerCapture(e.pointerId); paintCell(i, P.tool);
+  painting = true; lastPaint = i; g.setPointerCapture(e.pointerId); paintCell(i, P.tool);
 });
-pvEl.addEventListener('pointermove', e => { if (painting) paintCell(cellAt(e), P.tool); });
+function paintLine(from, to) {
+  if (from < 0 || to < 0) { paintCell(to, P.tool); return; }
+  const r0 = Math.floor(from / S.cols), c0 = from % S.cols, r1 = Math.floor(to / S.cols), c1 = to % S.cols;
+  const n = Math.max(Math.abs(r1 - r0), Math.abs(c1 - c0), 1);
+  for (let t = 0; t <= n; t++) paintCell(Math.round(r0 + (r1 - r0) * t / n) * S.cols + Math.round(c0 + (c1 - c0) * t / n), P.tool);
+}
+pvEl.addEventListener('pointermove', e => { if (!painting) return; const i = cellAt(e); if (i >= 0) { paintLine(lastPaint, i); lastPaint = i; } });
 ['pointerup', 'pointercancel'].forEach(ev => pvEl.addEventListener(ev, () => { if (painting) { painting = false; finishPaint(); } }));
 pvEl.addEventListener('contextmenu', e => { if (e.target.closest('#pgrid') && S.repaint && !P.locked) e.preventDefault(); });
 pvEl.addEventListener('keydown', e => {
