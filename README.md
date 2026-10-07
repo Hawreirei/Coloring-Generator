@@ -2,7 +2,7 @@
 
 One offline file: open `index.html` in any modern browser. No server, no account, no install.
 
-Upload a picture (PNG, JPG or WebP), choose a grid size and colors, choose the fraction questions, and get:
+Upload a picture (PNG, JPG or WebP), choose a grid size and up to 12 colors (snapped to a standard 12-crayon box, no in-between shades), choose the fraction questions, and get:
 
 - a printable **student sheet** (A4 portrait, stacked fractions, color key with answer ranges),
 - a colored **answer key** (optionally with each answer in its cell),

@@ -220,11 +220,12 @@ table.al th,table.al td{border-bottom:1px solid var(--line);padding:3px 8px;text
           <label>Rows (5–30)<div class="rn"><input type="range" min="5" max="30" data-k="rows" data-aff="3" data-t="int" aria-label="Rows"><input type="number" min="5" max="30" data-k="rows" data-aff="3" data-t="int" aria-label="Rows value"></div></label>
           <label>Columns (5–30)<div class="rn"><input type="range" min="5" max="30" data-k="cols" data-aff="3" data-t="int" aria-label="Columns"><input type="number" min="5" max="30" data-k="cols" data-aff="3" data-t="int" aria-label="Columns value"></div></label>
         </div>
-        <label>Colors (2–6)<div class="rn"><input type="range" min="2" max="6" data-k="k" data-aff="2" data-t="int" aria-label="Colors"><input type="number" min="2" max="6" data-k="k" data-aff="2" data-t="int" aria-label="Colors value"></div></label>
+        <label>Colors (2–12, fewer = fewer crayons)<div class="rn"><input type="range" min="2" max="12" data-k="k" data-aff="2" data-t="int" aria-label="Colors"><input type="number" min="2" max="12" data-k="k" data-aff="2" data-t="int" aria-label="Colors value"></div></label>
         <div class="row">
           <div class="seg" role="radiogroup" aria-label="Colour source">
-            <label><input type="radio" name="pm" value="auto" data-k="paletteMode" data-aff="2"><span>Auto-pick from image</span></label>
-            <label><input type="radio" name="pm" value="manual" data-k="paletteMode" data-aff="2"><span>Choose by hand</span></label>
+            <label><input type="radio" name="pm" value="crayon" data-k="paletteMode" data-aff="2"><span>12-crayon box</span></label>
+            <label><input type="radio" name="pm" value="auto" data-k="paletteMode" data-aff="2"><span>Exact image colors</span></label>
+            <label><input type="radio" name="pm" value="manual" data-k="paletteMode" data-aff="2"><span>By hand</span></label>
           </div>
           <button class="btn sm" type="button" id="repick">Re-pick</button>
         </div>
@@ -407,12 +408,15 @@ function rgb2lab(r, g, b) {
 const d2 = (a, b) => { const x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2]; return x * x + y * y + z * z; };
 const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
 const inkFor = c => lum(c) > 0.4 ? '#000' : '#fff';
-const NAMED = [
-  ['Red',[220,40,40]],['Orange',[245,130,30]],['Yellow',[250,220,40]],['Lime',[160,210,50]],['Green',[40,160,70]],
-  ['Dark green',[20,100,50]],['Teal',[20,150,150]],['Sky blue',[110,190,240]],['Blue',[40,90,200]],['Navy',[20,40,110]],
-  ['Purple',[130,60,170]],['Pink',[245,140,190]],['Magenta',[200,40,150]],['Brown',[130,80,40]],['Tan',[210,180,130]],
-  ['Peach',[250,200,170]],['Maroon',[130,25,40]],['Gray',[140,140,140]],['Light gray',[210,210,210]],['Charcoal',[55,55,60]],['White',[250,250,250]]
+/* A standard 12-crayon box (black is left out: black squares are the blank cells). */
+const CRAYONS = [
+  ['Red',[214,40,40]],['Orange',[245,130,30]],['Yellow',[250,220,40]],['Light green',[140,210,80]],['Green',[30,140,60]],['Sky blue',[100,185,235]],
+  ['Blue',[30,80,200]],['Purple',[120,60,170]],['Pink',[245,140,190]],['Brown',[125,80,45]],['Gray',[140,140,140]],['Peach',[250,205,170]]
 ].map(([n, c]) => ({ n, c, lab: rgb2lab(...c) }));
+const NAMED = CRAYONS.concat([
+  ['Lime',[160,210,50]],['Dark green',[20,100,50]],['Teal',[20,150,150]],['Navy',[20,40,110]],['Magenta',[200,40,150]],['Tan',[210,180,130]],
+  ['Maroon',[130,25,40]],['Light gray',[210,210,210]],['Charcoal',[55,55,60]],['White',[250,250,250]]
+].map(([n, c]) => ({ n, c, lab: rgb2lab(...c) })));
 function nameColors(pal) {
   const used = {};
   return pal.map(c => {
@@ -430,7 +434,7 @@ const FALLBACK = [[220,40,40],[40,90,200],[250,220,40],[40,160,70],[130,60,170],
    the first operand is a plain whole number (subtraction only).
    ===================================================================== */
 const DEFAULTS = {
-  rows: 10, cols: 10, fit: 'fit', k: 4, paletteMode: 'auto', manualColors: [],
+  rows: 10, cols: 10, fit: 'fit', k: 4, paletteMode: 'crayon', manualColors: [],
   blankTransparent: true, blankWhite: true, whiteThreshold: 240, posterize: 0, contrast: 0, repaint: true,
   keyDen: 100, maxAnswer: 2, bandMode: 'even', bandUpper: [], bandTotal: 0,
   op: 'add', addShare: 50, densText: '10, 100', pairType: 'unlike', maxDen: 100,
@@ -751,7 +755,8 @@ function doQuant(keepEdits) {
     blank.push(b); cols.push(adjustColor(comp));
   }
   let pal;
-  if (S.paletteMode === 'manual') {
+  if (S.paletteMode === 'crayon') pal = crayonPalette(cols, blank, k);
+  else if (S.paletteMode === 'manual') {
     while (S.manualColors.length < k) S.manualColors.push(toHex(FALLBACK[S.manualColors.length % FALLBACK.length]));
     S.manualColors.length = k;
     pal = S.manualColors.map(fromHex);
@@ -767,6 +772,31 @@ function doQuant(keepEdits) {
   if (!keepEdits) P.edits.clear();
   for (const [i, v] of P.edits) if (i < n && v < k) P.idx[i] = v;
   if (P.tool >= k) P.tool = 0;
+}
+
+/* Choose the k crayons from the 12-box that best cover the picture: start with every crayon the picture
+   needs, then keep dropping the one whose loss changes the picture least. */
+function crayonPalette(cols, blank, k) {
+  const labs = cols.map(c => rgb2lab(...c));
+  const cl = CRAYONS.map(c => c.lab), act = new Set();
+  const nearest = (l, set) => { let b = -1, bd = Infinity; for (const j of set) { const dd = d2(l, cl[j]); if (dd < bd) { bd = dd; b = j; } } return [b, bd]; };
+  const all = CRAYONS.map((_, j) => j);
+  labs.forEach((l, i) => { if (!blank[i]) act.add(nearest(l, all)[0]); });
+  while (act.size > k) {
+    let worst = -1, wc = Infinity;
+    for (const c of act) {
+      const rest = new Set(act); rest.delete(c); let cost = 0;
+      labs.forEach((l, i) => { if (blank[i]) return; const [b, bd] = nearest(l, act); if (b === c) cost += nearest(l, rest)[1] - bd; });
+      if (cost < wc) { wc = cost; worst = c; }
+    }
+    act.delete(worst);
+  }
+  while (act.size < Math.min(k, 2)) {                         // never fewer than 2 colors; otherwise use only the crayons the picture needs
+    let best = -1, bm = -1;
+    for (const j of all) if (!act.has(j)) { let m = Infinity; for (const a of act) m = Math.min(m, d2(cl[j], cl[a])); if (m > bm) { bm = m; best = j; } }
+    act.add(best);
+  }
+  return [...act].map(j => CRAYONS[j].c.slice()).sort((p, q) => rgb2lab(...p)[0] - rgb2lab(...q)[0]);
 }
 
 /* Re-compute questions, warnings and the puzzle itself. */
@@ -794,6 +824,8 @@ function doPuzzle() {
   Z.info = analyze(P.idx, cfg);
   const names = nameColors(P.palette);
   const blocked = [];
+  const seen = {};
+  P.palette.forEach((c, i) => { const h = toHex(c); if (seen[h] !== undefined) Z.warnings.push({ lv: 'warn', t: `${names[seen[h]]} and ${names[i]} are the same color. Pick a different crayon for one of them.` }); else seen[h] = i; });
   Z.info.forEach((inf, i) => {
     if (!inf.cells) { Z.warnings.push({ lv: 'info', t: `${names[i]} is not used in the picture, so its answer range ${rangeText(cfg.bands[i], cfg.D)} will not appear on the sheet.` }); return; }
     if (inf.count === null) return;
@@ -848,7 +880,7 @@ function titleText() {
   return `${w} ${S.pairType === 'unlike' ? 'with Unlike Fractions' : S.pairType === 'like' ? 'with Like Fractions' : 'Fractions'}`;
 }
 function layoutGrid(st, maxEm, fixedFont) {
-  const W = 190, H = 198;
+  const W = 190, H = gridMm();
   const cell = Math.min(W / S.cols, H / S.rows);
   const pt = cell * MM, usable = pt - 5;
   let font = Math.min(14, usable / maxEm, usable / 2.6);
@@ -869,8 +901,12 @@ function headerHTML(sub, note) {
     <div class="pl ${S.nameDate ? '' : 'one'}"><span>Mystery Puzzle: <i class="ln a"></i></span>${S.nameDate ? '<span>Name: <i class="ln b"></i> &nbsp;Date: <i class="ln c"></i></span>' : ''}</div>
     <p>${note}</p></header>`;
 }
-function markOf(i) { return S.marks === 'letters' ? 'ABCDEF'[i] : ''; }
-function patClass(i) { return S.marks === 'patterns' ? ' pat' + i : ''; }
+const effMarks = () => S.marks === 'patterns' && P.palette.length > 6 ? 'letters' : S.marks;
+function markOf(i) { return effMarks() === 'letters' ? 'ABCDEFGHIJKL'[i] : ''; }
+function patClass(i) { return effMarks() === 'patterns' ? ' pat' + i : ''; }
+const keyCols = () => P.palette.length > 6 ? 4 : 3;
+const keyMm = () => P.palette.length > 8 ? 46 : P.palette.length > 6 ? 36 : 36;
+const gridMm = () => 276 - 30 - keyMm() - 6 - 6;
 function keyHTML() {
   const cfg = Z.cfg, names = nameColors(P.palette);
   const items = cfg.bands.map((b, i) => {
@@ -878,7 +914,7 @@ function keyHTML() {
     return `<div class="kitem"><span class="ksw${patClass(i)}" style="background:${toHex(c)};color:${inkFor(c)}">${markOf(i)}</span>
       <span><span class="kn">${esc(names[i])}</span><br><span class="kr">${fracHTML(b.lo, cfg.D)}<span>to</span>${fracHTML(b.hi, cfg.D)}</span></span></div>`;
   }).join('');
-  return `<div class="pkey"><h2>Color key</h2><div class="kitems">${items}</div></div>`;
+  return `<div class="pkey" style="height:${keyMm()}mm"><h2>Color key</h2><div class="kitems" style="grid-template-columns:repeat(${keyCols()},1fr)">${items}</div></div>`;
 }
 function footHTML() { return `<footer class="pfoot"><span>Seed ${esc(S.seed)} · ${S.rows}×${S.cols} grid · ${P.palette.length} colors</span><span>Mystery Pixel Fraction Puzzle</span></footer>`; }
 function studentPageHTML() {
@@ -886,7 +922,7 @@ function studentPageHTML() {
   const cells = Z.result.cells.map(c => c.blank ? '<div class="cell blank"></div>' : `<div class="cell">${probHTML(c.prob, S.fracStyle)}</div>`).join('');
   return `<section class="page" data-kind="student" style="--fs:${lay.fs.toFixed(2)}pt">
     ${headerHTML('', 'Solve each problem. Find the answer in the color key, then color the square that color. Blank squares are black.')}
-    <div class="gridwrap"><div class="sgrid" style="grid-template-columns:repeat(${S.cols},${lay.cell.toFixed(3)}mm);grid-auto-rows:${lay.cell.toFixed(3)}mm">${cells}</div></div>
+    <div class="gridwrap" style="height:${gridMm()}mm"><div class="sgrid" style="grid-template-columns:repeat(${S.cols},${lay.cell.toFixed(3)}mm);grid-auto-rows:${lay.cell.toFixed(3)}mm">${cells}</div></div>
     ${keyHTML()}${footHTML()}</section>`;
 }
 function keyPageHTML() {
@@ -899,11 +935,11 @@ function keyPageHTML() {
     if (c.blank) return '<div class="cell blank"></div>';
     const col = P.palette[c.band], ink = inkFor(col);
     const ans = S.showAnswers ? `<span class="ans" style="background:${toHex(col)}b3;padding:0 .3mm">${fracHTML(c.T, cfg.D)}</span>` : '';
-    return `<div class="cell${patClass(c.band)}" style="background-color:${toHex(col)};color:${ink}">${S.marks === 'letters' ? `<span class="mk">${markOf(c.band)}</span>` : ''}${ans}</div>`;
+    return `<div class="cell${patClass(c.band)}" style="background-color:${toHex(col)};color:${ink}">${effMarks() === 'letters' ? `<span class="mk">${markOf(c.band)}</span>` : ''}${ans}</div>`;
   }).join('');
   return `<section class="page" data-kind="key" style="--afs:${afs.toFixed(2)}pt">
     ${headerHTML('Answer Key', 'Teacher copy. Each square shows the color its answer earns. Blank squares stay black.')}
-    <div class="gridwrap"><div class="sgrid" style="grid-template-columns:repeat(${S.cols},${lay.cell.toFixed(3)}mm);grid-auto-rows:${lay.cell.toFixed(3)}mm">${cells}</div></div>
+    <div class="gridwrap" style="height:${gridMm()}mm"><div class="sgrid" style="grid-template-columns:repeat(${S.cols},${lay.cell.toFixed(3)}mm);grid-auto-rows:${lay.cell.toFixed(3)}mm">${cells}</div></div>
     ${keyHTML()}${footHTML()}</section>`;
 }
 function listRows() {
@@ -945,6 +981,8 @@ function renderNotes() {
   if (lay && lay.tooDense) {
     items.push({ lv: 'warn', t: `Cells are too small for ${S.fracStyle} fractions at the 8 pt minimum. Use ${lay.maxCols} columns or fewer${lay.altOK ? `, or switch to ${lay.other} form` : ''}.` });
   }
+  if (S.paletteMode === 'crayon' && P.palette.length && P.palette.length < S.k) items.push({ lv: 'info', t: `This picture only needs ${P.palette.length} crayons, so only ${P.palette.length} are used (you allowed up to ${S.k}).` });
+  if (S.marks === 'patterns' && P.palette.length > 6) items.push({ lv: 'info', t: 'Patterns work for up to 6 colors, so letters are used instead.' });
   if (Z.status === 'ok') {
     const n = Z.result.cells.filter(c => !c.blank).length;
     items.push({ lv: 'ok', t: `${n} problem${n === 1 ? '' : 's'} generated. Every exact answer was checked with whole-number arithmetic and falls inside its cell's color range.` });
@@ -966,8 +1004,8 @@ function renderPicture() {
   const cells = P.idx.map((v, i) => v < 0 ? `<div class="pc bl" data-i="${i}"></div>` : `<div class="pc" data-i="${i}" style="background:${toHex(P.palette[v])}"></div>`).join('');
   const pal = P.palette.map((c, i) => `<div class="palrow${P.tool === i ? ' sel' : ''}" data-tool="${i}">
       <input type="radio" name="tool" aria-label="Paint with ${esc(names[i])}" ${P.tool === i ? 'checked' : ''} data-tool="${i}">
-      <input type="color" value="${toHex(c)}" data-pcol="${i}" aria-label="Change ${esc(names[i])}" ${P.locked ? 'disabled' : ''}>
-      <span>${esc(names[i])}</span><span class="cnt">${counts[i]}</span></div>`).join('');
+      ${S.paletteMode === 'auto' ? `<input type="color" value="${toHex(c)}" data-pcol="${i}" aria-label="Change ${esc(names[i])}" ${P.locked ? 'disabled' : ''}>` : `<span class="sw" style="background:${toHex(c)};width:26px;height:26px"></span>`}
+      ${S.paletteMode === 'auto' ? `<span>${esc(names[i])}</span>` : `<select data-psel="${i}" aria-label="Crayon for color ${i + 1}" ${P.locked ? 'disabled' : ''}>${crayonOptions(c)}</select>`}<span class="cnt">${counts[i]}</span></div>`).join('');
   const blankRow = `<div class="palrow${P.tool === -1 ? ' sel' : ''}" data-tool="-1"><input type="radio" name="tool" aria-label="Paint blank (black)" ${P.tool === -1 ? 'checked' : ''} data-tool="-1"><span class="sw" style="background:#000"></span><span>Blank (black)</span><span class="cnt">${blanks}</span></div>`;
   pvEl.innerHTML = `<div class="pictop">
     <div style="flex:1 1 320px;min-width:0"><div class="pgrid${S.repaint && !P.locked ? ' edit' : ''}" id="pgrid" tabindex="0" role="application" aria-label="Picture, ${S.rows} rows by ${S.cols} columns. Arrow keys move, Space paints, B toggles blank."
@@ -980,6 +1018,10 @@ function renderPicture() {
   if (th && P.src) { const w = 150, h = Math.max(1, Math.round(w * P.src.height / P.src.width)); th.width = w; th.height = h; th.getContext('2d').drawImage(P.src, 0, 0, w, h); }
   markCursor();
   $('#paintCount').textContent = P.edits.size ? `${P.edits.size} cell${P.edits.size === 1 ? '' : 's'} repainted` : '';
+}
+function crayonOptions(c) {
+  const h = toHex(c), cur = CRAYONS.findIndex(x => toHex(x.c) === h);
+  return (cur < 0 ? `<option value="-1" selected>${esc(nameColors([c])[0])} (custom)</option>` : '') + CRAYONS.map((x, j) => `<option value="${j}" ${j === cur ? 'selected' : ''}>${x.n}</option>`).join('');
 }
 function markCursor() {
   const g = $('#pgrid'); if (!g) return;
@@ -1135,7 +1177,7 @@ function regenerate() { S.seed = newSeed(); applyNow(1); }
 $('#regen').addEventListener('click', regenerate);
 $('#regenSm').addEventListener('click', regenerate);
 $('#gen').addEventListener('click', () => { applyNow(1); if (tab === 'pic' && Z.status === 'ok') { tab = 'stu'; renderPreview(); } });
-$('#repick').addEventListener('click', () => { S.paletteMode = 'auto'; applyNow(2); });
+$('#repick').addEventListener('click', () => { S.paletteMode = 'crayon'; applyNow(2); });
 $('#undoPaint').addEventListener('click', () => { if (P.src) applyNow(2); else { P.edits.clear(); renderAll(); } });
 
 /* image loading */
@@ -1224,6 +1266,12 @@ pvEl.addEventListener('click', e => {
   const r = e.target.closest('[data-tool]');
   if (r && !e.target.closest('[data-pcol]')) { P.tool = Number(r.dataset.tool); $$('.palrow', pvEl).forEach(x => { x.classList.toggle('sel', Number(x.dataset.tool) === P.tool); x.querySelector('input[type=radio]').checked = Number(x.dataset.tool) === P.tool; }); }
 });
+pvEl.addEventListener('change', e => {
+  const t = e.target, i = t.dataset && t.dataset.psel; if (i === undefined || P.locked || Number(t.value) < 0) return;
+  P.palette[Number(i)] = CRAYONS[Number(t.value)].c.slice();
+  S.paletteMode = 'manual'; S.manualColors = P.palette.map(toHex);
+  doPuzzle(); renderAll();
+});
 pvEl.addEventListener('input', e => {
   const i = e.target.dataset && e.target.dataset.pcol; if (i === undefined || P.locked) return;
   P.palette[Number(i)] = fromHex(e.target.value);
@@ -1254,7 +1302,7 @@ $('#csv').addEventListener('click', () => {
   Z.result.cells.forEach((c, i) => {
     const r = Math.floor(i / S.cols) + 1, cc = i % S.cols + 1;
     lines.push(c.blank ? [r, cc, q('Blank (black)'), '""', '""', '""'].join(',')
-      : [r, cc, q(names[c.band]), q('ABCDEF'[c.band]), q(probText(c.prob).replace('−', '-')), q(`${c.T}/${Z.cfg.D}`)].join(','));
+      : [r, cc, q(names[c.band]), q('ABCDEFGHIJKL'[c.band]), q(probText(c.prob).replace('−', '-')), q(`${c.T}/${Z.cfg.D}`)].join(','));
   });
   download(`answer-list-seed-${S.seed}.csv`, '﻿' + lines.join('\r\n') + '\r\n', 'text/csv');
 });
@@ -1262,7 +1310,7 @@ $('#saveJson').addEventListener('click', () => {
   if (!P.idx.length) { P.status = 'Load a picture before saving settings.'; renderNotes(); return; }
   const data = {
     app: 'mystery-pixel-fraction-puzzle', version: 1, settings: S,
-    picture: { rows: S.rows, cols: S.cols, palette: P.palette.map(toHex), cells: Array.from({ length: S.rows }, (_, r) => P.idx.slice(r * S.cols, (r + 1) * S.cols).map(v => v < 0 ? '.' : String(v)).join('')) }
+    picture: { rows: S.rows, cols: S.cols, palette: P.palette.map(toHex), cells: Array.from({ length: S.rows }, (_, r) => P.idx.slice(r * S.cols, (r + 1) * S.cols).map(v => v < 0 ? '.' : v.toString(36)).join('')) }
   };
   download(`mystery-puzzle-seed-${S.seed}.json`, JSON.stringify(data, null, 2), 'application/json');
 });
@@ -1284,11 +1332,11 @@ function importSettings(raw) {
   const rows = int(pic.rows, 5, 30, NaN), cols = int(pic.cols, 5, 30, NaN);
   if (!Number.isFinite(rows) || !Number.isFinite(cols) || !Array.isArray(pic.palette) || !Array.isArray(pic.cells)) throw new Error('picture');
   const k = pic.palette.length;
-  if (k < 2 || k > 6 || !pic.palette.every(h => /^#[0-9a-fA-F]{6}$/.test(h)) || pic.cells.length !== rows) throw new Error('palette');
+  if (k < 2 || k > 12 || !pic.palette.every(h => /^#[0-9a-fA-F]{6}$/.test(h)) || pic.cells.length !== rows) throw new Error('palette');
   const idx = [];
   for (const row of pic.cells) {
     if (typeof row !== 'string' || row.length !== cols) throw new Error('cells');
-    for (const ch of row) { if (ch === '.') idx.push(-1); else if (/^[0-5]$/.test(ch) && Number(ch) < k) idx.push(Number(ch)); else throw new Error('cell'); }
+    for (const ch of row) { if (ch === '.') idx.push(-1); else if (/^[0-9a-b]$/.test(ch) && parseInt(ch, 36) < k) idx.push(parseInt(ch, 36)); else throw new Error('cell'); }
   }
   Object.assign(d, {
     rows, cols, k, fit: oneOf(s.fit, ['fit', 'crop'], d.fit), paletteMode: 'manual', manualColors: pic.palette.map(h => h.toLowerCase()),
