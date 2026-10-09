@@ -111,7 +111,8 @@ table.al th,table.al td{border-bottom:1px solid var(--line);padding:3px 8px;text
 .opd{display:inline-flex;align-items:center}
 .op{margin:0 .3em;font-weight:600}
 .prob{display:flex;align-items:center;justify-content:center;white-space:nowrap;font-variant-numeric:tabular-nums}
-.prob.sl{flex-direction:column;line-height:1.2}
+.prob.two{flex-direction:column;gap:.08em}
+.prob.two .op{margin-left:0}
 
 /* ---------- printable pages ---------- */
 .page{background:#fff;color:#000;width:210mm;height:297mm;padding:10mm;display:flex;flex-direction:column;gap:2mm;overflow:hidden;font-family:var(--pfont,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif)}
@@ -325,8 +326,15 @@ table.al th,table.al td{border-bottom:1px solid var(--line);padding:3px 8px;text
           <label>Title size (pt)<input type="number" min="12" max="32" step="1" data-k="titleSize" data-aff="0" data-t="num"></label>
           <label>Other text size (pt)<input type="number" min="7" max="14" step="0.5" data-k="textSize" data-aff="0" data-t="num"></label>
         </div>
-        <label class="chk"><input type="checkbox" data-k="probAuto" data-aff="0"> Problem size: fit to the squares automatically</label>
-        <label>Problem size (pt)<input type="number" min="8" max="24" step="0.5" data-k="probSize" data-aff="0" data-t="num" id="probSize"></label>
+        <label>Problem text size (pt)
+          <div class="rn"><input type="range" min="4" max="24" step="0.5" data-k="probSize" data-aff="0" data-t="num" aria-label="Problem text size"><input type="number" min="4" max="24" step="0.5" data-k="probSize" data-aff="0" data-t="num" aria-label="Problem text size value"></div>
+        </label>
+        <div class="row"><button class="btn sm" type="button" id="probFit">Fit to squares</button>
+          <label class="chk"><input type="checkbox" data-k="probAuto" data-aff="0"> Always fit automatically</label></div>
+        <label>Problem layout
+          <select data-k="probLayout" data-aff="0"><option value="auto">Automatic (biggest text)</option><option value="one">One line</option><option value="two">Two lines</option></select>
+        </label>
+        <p class="hint" id="probHint"></p>
         <label class="chk"><input type="checkbox" data-k="probBold" data-aff="0"> Bold problems</label>
         <p class="hint">Fonts come from the computer, so the tool still works offline. If a font is missing, a similar one is used.</p>
       </div>
@@ -465,7 +473,7 @@ const DEFAULTS = {
   op: 'add', addShare: 50, densText: '10, 100', pairType: 'unlike', maxDen: 100,
   forms: { proper: true, improper: true, mixed: true }, noRepeat: true,
   title: '', nameDate: true, fracStyle: 'stacked', marks: 'none', showAnswers: false, seed: '',
-  font: 'sans', titleSize: 19, textSize: 9.5, probAuto: true, probSize: 12, probBold: false
+  font: 'sans', titleSize: 19, textSize: 9.5, probAuto: true, probSize: 12, probBold: false, probLayout: 'auto'
 };
 
 function parseDens(text) {
@@ -1046,10 +1054,11 @@ function operandHTML(o, st) {
   if (st === 'slash') return `<span class="opd">${o.w ? o.w + ' ' : ''}${o.n}/${o.d}</span>`;
   return o.w ? `<span class="opd mx"><span>${o.w}</span>${fracHTML(o.n, o.d)}</span>` : `<span class="opd">${fracHTML(o.n, o.d)}</span>`;
 }
-function probHTML(p, st) {
-  return st === 'stacked'
-    ? `<div class="prob">${operandHTML(p.x, st)}<span class="op">${SYM[p.op]}</span>${operandHTML(p.y, st)}</div>`
-    : `<div class="prob sl"><span>${operandHTML(p.x, st)}</span><span>${SYM[p.op]} ${operandHTML(p.y, st)}</span></div>`;
+function probHTML(p, st, lines = 1) {
+  const x = operandHTML(p.x, st), y = operandHTML(p.y, st), op = `<span class="op">${SYM[p.op]}</span>`;
+  return lines === 2
+    ? `<div class="prob two"><span class="opd">${x}</span><span class="opd">${op}${y}</span></div>`
+    : `<div class="prob">${x}${op}${y}</div>`;
 }
 function titleText() {
   if (S.title.trim()) return S.title.trim();
@@ -1064,6 +1073,27 @@ function layoutGrid(st, maxEm, fixedFont) {
   if (fixedFont) font = Math.min(font, fixedFont);
   return { cell, font, tooDense: font < 8, usable };
 }
+/* Size of the widest and tallest piece of text at 10 pt, measured in the real font (cached). */
+let measureCache = new Map();
+function measureMax(htmls, weight) {
+  const key = fontOf().stack + '|' + weight + '|' + htmls.join('');
+  if (measureCache.has(key)) return measureCache.get(key);
+  const box = document.createElement('div');
+  box.style.cssText = `position:absolute;left:-20000px;top:0;visibility:hidden;font-family:${fontOf().stack};font-size:10pt;font-weight:${weight};line-height:normal`;
+  box.innerHTML = [...new Set(htmls)].map(h => `<div style="display:inline-block">${h}</div>`).join('');
+  document.body.appendChild(box);
+  let w = 1, h = 1;
+  for (const el of box.children) { const r = el.getBoundingClientRect(); w = Math.max(w, r.width); h = Math.max(h, r.height); }
+  box.remove();
+  if (measureCache.size > 40) measureCache = new Map();
+  const out = { w, h }; measureCache.set(key, out); return out;
+}
+/* Largest font size (pt) at which every problem fits inside a square of `cell` mm, leaving a small margin. */
+function fitPt(cell, st, lines) {
+  const m = measureMax(Z.result.cells.filter(c => !c.blank).map(c => probHTML(c.prob, st, lines)), S.probBold ? 700 : 400);
+  const avail = (cell - 2.4) * 96 / 25.4;
+  return Math.max(1, 10 * Math.min(avail / m.w, avail / m.h));
+}
 function studentLayout() {
   let maxS = 1, maxL = 1;
   for (const c of Z.result.cells) if (!c.blank) { maxS = Math.max(maxS, emProblem(c.prob, 'stacked')); maxL = Math.max(maxL, emProblem(c.prob, 'slash')); }
@@ -1071,8 +1101,16 @@ function studentLayout() {
   const lay = layoutGrid(cur, cur === 'stacked' ? maxS : maxL);
   const alt = layoutGrid(other, other === 'stacked' ? maxS : maxL);
   const maxCols = Math.max(5, Math.floor(190 * MM / (8 * (cur === 'stacked' ? maxS : maxL) + 5)));
-  const fs = S.probAuto ? Math.max(8, lay.font) : S.probSize;
-  return { ...lay, fs, overflow: !S.probAuto && S.probSize > Math.max(8, lay.font) + 0.05, altOK: !alt.tooDense, other, maxCols };
+  const best = (st) => {                                                  // real measurement, not an estimate
+    const f1 = S.probLayout === 'two' ? 0 : fitPt(lay.cell, st, 1), f2 = S.probLayout === 'one' ? 0 : fitPt(lay.cell, st, 2);
+    return f2 > f1 ? { f: f2, lines: 2 } : { f: f1, lines: 1 };
+  };
+  const b = best(cur), fit = Math.floor(Math.min(24, b.f) * 4) / 4, lines = b.lines;
+  const fitOther = best(other).f;
+  const fs = S.probAuto ? Math.max(1.5, fit) : S.probSize;
+  const per8 = (lay.cell - 2.4) * 8 / fit + 2.4;                          // square size needed for 8 pt text
+  return { ...lay, fit, fs, lines, tooDense: fs < 8, overflow: !S.probAuto && S.probSize > fit + 0.01,
+    altOK: fitOther >= 8, other, maxCols: Math.max(5, Math.floor(190 / per8)) };
 }
 function headerHTML(sub, note) {
   return `<header class="phead"><h1>${esc(titleText())}${sub ? ' — ' + sub : ''}</h1>
@@ -1100,7 +1138,7 @@ function keyHTML() {
 function footHTML() { return `<footer class="pfoot"><span>Seed ${esc(S.seed)} · ${S.rows}×${S.cols} grid · ${P.palette.length} colors</span><span>Mystery Pixel Fraction Puzzle</span></footer>`; }
 function studentPageHTML() {
   const lay = studentLayout();
-  const cells = Z.result.cells.map(c => c.blank ? '<div class="cell blank"></div>' : `<div class="cell">${probHTML(c.prob, S.fracStyle)}</div>`).join('');
+  const cells = Z.result.cells.map(c => c.blank ? '<div class="cell blank"></div>' : `<div class="cell">${probHTML(c.prob, S.fracStyle, lay.lines)}</div>`).join('');
   return `<section class="page" data-kind="student" style="${esc(pageVars())};--fs:${lay.fs.toFixed(2)}pt">
     ${headerHTML('', 'Solve each problem. Find the answer in the color key, then color the square that color. Blank squares are black.' + (P.palette.some(c => toHex(c) === '#ffffff') ? ' White means leave the square uncolored.' : ''))}
     <div class="gridwrap" style="height:${gridMm()}mm"><div class="sgrid" style="grid-template-columns:repeat(${S.cols},${lay.cell.toFixed(3)}mm);grid-auto-rows:${lay.cell.toFixed(3)}mm">${cells}</div></div>
@@ -1111,7 +1149,9 @@ function keyPageHTML() {
   let maxEm = 1;
   for (const c of Z.result.cells) if (!c.blank) maxEm = Math.max(maxEm, emFrac(c.T, cfg.D, 'stacked'));
   const lay = layoutGrid('stacked', maxEm);
-  const afs = Math.max(5.5, Math.min(11, lay.font));
+  const am = measureMax(Z.result.cells.filter(c => !c.blank).map(c => fracHTML(c.T, cfg.D)), 400);
+  const aAvail = (lay.cell - 1.6) * 96 / 25.4;
+  const afs = Math.max(4, Math.min(12, 10 * Math.min(aAvail / am.w, aAvail / am.h)));
   const cells = Z.result.cells.map(c => {
     if (c.blank) return '<div class="cell blank"></div>';
     const col = P.palette[c.band], ink = inkFor(col);
@@ -1159,10 +1199,10 @@ function renderNotes() {
   for (const e of Z.errors) items.push({ lv: 'err', t: e });
   for (const n of Z.notes) items.push({ lv: 'warn', t: n });
   for (const w of Z.warnings) items.push(w);
-  if (lay && lay.overflow) items.push({ lv: 'warn', t: `Problem text is ${S.probSize} pt, but the squares only fit about ${Math.max(8, lay.font).toFixed(1)} pt, so problems will spill over. Use a smaller size, fewer columns, or turn on automatic fit.` });
-  if (lay && lay.tooDense) {
-    items.push({ lv: 'warn', t: `Cells are too small for ${S.fracStyle} fractions at the 8 pt minimum. Use ${lay.maxCols} columns or fewer${lay.altOK ? `, or switch to ${lay.other} form` : ''}.` });
-  }
+  if (lay && S.probAuto) S.probSize = Math.max(4, lay.fit);
+  P.fit = lay ? lay.fit : 0;
+  if (lay && lay.overflow) items.push({ lv: 'warn', t: `Problem text is ${S.probSize} pt, but only ${lay.fit} pt fits in the squares, so some problems spill over. Lower the problem size or press "Fit to squares".` });
+  else if (lay && lay.tooDense) items.push({ lv: 'warn', t: `Problems are printed at ${lay.fs} pt, which is small for young students. Use ${lay.maxCols} columns or fewer for 8 pt or larger${lay.altOK ? `, or switch to ${lay.other} fractions` : ''}.` });
   if (S.paletteMode === 'crayon' && P.palette.length && P.palette.length < S.k) items.push({ lv: 'info', t: `This picture only needs ${P.palette.length} crayons, so only ${P.palette.length} are used (you allowed up to ${S.k}).` });
   if (S.marks === 'patterns' && P.palette.length > 6) items.push({ lv: 'info', t: 'Patterns work for up to 6 colors, so letters are used instead.' });
   if (Z.status === 'ok') {
@@ -1269,7 +1309,7 @@ function syncInputs() {
     else if (el.type === 'checkbox') el.checked = !!v;
     else el.value = v;
   });
-  $('#probSize').disabled = !!S.probAuto;
+  $('#probHint').textContent = P.fit ? `Largest size that fits the squares: ${P.fit} pt.` + (S.probAuto ? ' Size follows the squares automatically.' : '') : '';
   const lock = P.locked || P.fromFile;
   $$('#fs1 [data-k], #fs2 [data-k]').forEach(el => { if (['repaint'].includes(el.dataset.k)) return; el.disabled = lock; });
   $('#repick').disabled = lock; $('#matchShape').disabled = lock; $('#undoPaint').disabled = P.locked;
@@ -1329,6 +1369,7 @@ function onField(e, final) {
   setPath(S, key, v);
   if (key === 'k' && S.paletteMode === 'manual') { /* quant trims or extends the manual list */ }
   if (key === 'seed' && !String(v).length) return;
+  if (key === 'probSize') S.probAuto = false;
   schedule(Number(el.dataset.aff));
 }
 $('#panel').addEventListener('input', e => onField(e, false));
@@ -1362,6 +1403,7 @@ function regenerate() { S.seed = newSeed(); applyNow(1); }
 $('#regen').addEventListener('click', regenerate);
 $('#regenSm').addEventListener('click', regenerate);
 $('#gen').addEventListener('click', () => { applyNow(1); if (tab === 'pic' && Z.status === 'ok') { tab = 'stu'; renderPreview(); } });
+$('#probFit').addEventListener('click', () => { if (P.fit) S.probSize = P.fit; renderAll(); });
 $('#matchShape').addEventListener('click', () => { matchShape(); applyNow(3); });
 $('#repick').addEventListener('click', () => { S.paletteMode = 'crayon'; applyNow(2); });
 $('#undoPaint').addEventListener('click', () => { if (P.src) applyNow(2); else { P.edits.clear(); renderAll(); } });
@@ -1545,7 +1587,7 @@ function importSettings(raw) {
     fracStyle: oneOf(s.fracStyle, ['stacked', 'slash'], 'stacked'), marks: oneOf(s.marks, ['none', 'letters', 'patterns'], 'none'),
     showAnswers: !!s.showAnswers, font: oneOf(s.font, Object.keys(FONTS), 'sans'),
     titleSize: clamp(Number(s.titleSize) || 19, 12, 32), textSize: clamp(Number(s.textSize) || 9.5, 7, 14),
-    probAuto: s.probAuto !== false, probSize: clamp(Number(s.probSize) || 12, 8, 24), probBold: !!s.probBold, seed: String(s.seed || newSeed()).slice(0, 40)
+    probAuto: s.probAuto !== false, probSize: clamp(Number(s.probSize) || 12, 4, 24), probBold: !!s.probBold, probLayout: oneOf(s.probLayout, ['auto', 'one', 'two'], 'auto'), seed: String(s.seed || newSeed()).slice(0, 40)
   });
   S = d;
   P.src = null; P.prep = null; P.pix = null; P.fromFile = true; P.edits.clear();
