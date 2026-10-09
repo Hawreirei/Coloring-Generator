@@ -16,12 +16,19 @@ Instead of uploading, choose **Type what to draw** and type a word such as `cat`
 - **36 built-in pixel pictures** (animals, fruit, vehicles, weather, toys and more) work offline. They use
   only crayon colors with a black outline, and land on the grid one square per pixel, so they are always clear.
   English and common Indonesian words are understood.
-- **Draw anything with AI** (optional): paste a Claude API key and the tool asks Claude to draw the subject as
-  crayon-color pixel art (12×12 to 24×24). You choose the model: the latest Claude models (Fable 5.1, Opus 5.5
-  recommended, Sonnet 5.5, Haiku 5.5) or older ones still served, or press "Load models from my account" to list
-  exactly the models your key can use. This needs internet; the key is sent only to Anthropic, is never put
-  in saved settings files, and is remembered on the computer only if you tick the box. The official Anthropic
-  SDK (MIT License) is bundled into the file for this.
+- **Draw anything with AI** (optional, needs internet): pick an AI service, paste its API key, and the tool asks
+  it to draw the subject as crayon-color pixel art (12×12 to 24×24).
+  - **Google Gemini**: free tier with daily limits (free key at aistudio.google.com).
+  - **OpenRouter**: some models are free (names end in `:free`); the model list loads automatically, free first.
+  - **OpenCode Zen**: some models are free; press "Load models".
+  - **Anthropic (Claude)** and **OpenAI**: paid. Claude offers the latest models (Fable 5.1, Opus 5.5 recommended,
+    Sonnet 5.5, Haiku 5.5) and older ones still served.
+  - **Other (OpenAI-compatible)**: any `/v1` address, such as Groq or a local Ollama.
+
+  Every service has a model list, "Load models" (lists what your key can use), and a box to type any model name.
+  Keys go only to the chosen service, are never put in saved settings files, and are remembered on the computer
+  only if you tick the box. The official Anthropic SDK (MIT License) is bundled for Claude; other services are
+  called over their standard web APIs. Small and free models draw less reliably than large ones.
 
 ## How pictures are turned into squares
 
