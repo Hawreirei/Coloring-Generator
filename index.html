@@ -196,15 +196,24 @@ table.al th,table.al td{border-bottom:1px solid var(--line);padding:3px 8px;text
           </label>
           <div class="status" id="drawMsg" role="status" aria-live="polite">Built-in pictures work offline. English and some Indonesian words work (kucing, apel, roket…).</div>
           <details id="iconBox"><summary class="hint" style="cursor:pointer">Built-in pictures (36, work offline)</summary><div class="chips" id="iconChips" style="margin-top:8px"></div></details>
-          <details id="aiBox"><summary class="hint" style="cursor:pointer">Draw anything with AI (needs internet and a Claude API key)</summary>
+          <details id="aiBox"><summary class="hint" style="cursor:pointer">Draw anything with AI (needs internet and an API key: Claude, Gemini, OpenRouter, OpenCode, OpenAI…)</summary>
             <div class="grp" style="margin-top:8px">
-              <label>Claude API key <input type="password" id="aiKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"></label>
+              <label>AI service <select id="aiProvider"></select></label>
+              <p class="hint" id="aiNote"></p>
+              <label id="aiBaseRow" hidden>Service address <input type="text" id="aiBase" autocomplete="off" spellcheck="false" placeholder="https://…/v1"></label>
+              <label>API key <input type="password" id="aiKey" autocomplete="off" spellcheck="false"></label>
               <label class="chk"><input type="checkbox" id="aiRemember"> Remember the key on this computer</label>
+              <label>Model
+                <select id="aiModel"></select>
+              </label>
+              <label>or type a model name <input type="text" id="aiModelCustom" autocomplete="off" spellcheck="false" placeholder="leave empty to use the list"></label>
+              <div class="row"><button class="btn sm" id="aiModels" type="button">Load models</button><span class="hint" id="aiModelHint"></span></div>
               <label>Picture size
                 <select id="aiSize"><option value="12">12 × 12 (big squares, easy)</option><option value="16" selected>16 × 16</option><option value="20">20 × 20</option><option value="24">24 × 24 (more detail)</option></select>
               </label>
               <button class="btn sm" id="aiBtn" type="button">Draw with AI</button>
-              <p class="hint">What you type and your key go only to Anthropic (Claude). The key is not put in saved settings files. Don't remember it on a shared computer.</p>
+              <p class="hint" id="aiPrivacy"></p>
+              <p class="hint">Small and free models draw less reliably. If a picture looks wrong, press "Draw with AI" again or try a bigger model.</p>
             </div>
           </details>
         </div>
@@ -1774,57 +1783,258 @@ The picture has to be recognisable at a glance by a six-year-old at this small s
 - Use at most six colours besides black and white. Eyes and other tiny details can be black pixels.
 - Leave everything around the subject as "." (no scenery, no frame, no text).
 - No shading, gradients, dithering or single stray pixels.`;
+/* ---------- AI providers ---------- */
+const PROVIDERS = {
+  anthropic: { name: 'Anthropic (Claude)', key: 'sk-ant-…', note: 'Paid. Get a key at console.anthropic.com.', needKey: true },
+  gemini: { name: 'Google Gemini', key: 'AIza…', note: 'Has a free tier with daily limits. Get a free key at aistudio.google.com.', base: 'https://generativelanguage.googleapis.com/v1beta', needKey: true },
+  openrouter: { name: 'OpenRouter', key: 'sk-or-…', note: 'Some models are free: their names end in “:free”. Get a free key at openrouter.ai. Free models change often, so the list loads automatically.', base: 'https://openrouter.ai/api/v1', compat: true, needKey: true, autoload: true },
+  opencode: { name: 'OpenCode Zen', key: 'Your OpenCode Zen key', note: 'Some models are free. Get a key at opencode.ai/zen, then press “Load models”.', base: 'https://opencode.ai/zen/v1', compat: true, needKey: true, editBase: true },
+  openai: { name: 'OpenAI', key: 'sk-…', note: 'Paid. Get a key at platform.openai.com.', base: 'https://api.openai.com/v1', compat: true, needKey: true, schema: true },
+  custom: { name: 'Other (OpenAI-compatible)', key: 'API key (if the service needs one)', note: 'Any service with an OpenAI-style address ending in /v1, for example Groq (https://api.groq.com/openai/v1) or a local Ollama (http://localhost:11434/v1).', base: '', compat: true, needKey: false, editBase: true }
+};
+/* Claude models, newest first. fb = server-side refusal fallback, effort = effort setting, so = JSON schema output. */
+const AI_MODELS = [
+  { id: 'claude-fable-5-1', label: 'Claude Fable 5.1 (most capable, slowest, most expensive)', group: 'Latest', fb: true, effort: true, so: true },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (recommended)', group: 'Latest', fb: true, effort: true, so: true },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (faster, cheaper)', group: 'Latest', fb: true, effort: true, so: true },
+  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (fastest, cheapest)', group: 'Latest', fb: false, effort: true, so: true },
+  { id: 'claude-fable-5', label: 'Claude Fable 5', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-opus-5', label: 'Claude Opus 5', group: 'Older', fb: true, effort: true, so: true },
+  { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-opus-4-7', label: 'Claude Opus 4.7', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-opus-4-5', label: 'Claude Opus 4.5', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', group: 'Older', fb: false, effort: false, so: true },
+  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', group: 'Older', fb: false, effort: false, so: true },
+  { id: 'claude-sonnet-4-0', label: 'Claude Sonnet 4 (being retired)', group: 'Older', fb: false, effort: false, so: false },
+  { id: 'claude-opus-4-0', label: 'Claude Opus 4 (being retired)', group: 'Older', fb: false, effort: false, so: false }
+];
+const STATIC_MODELS = {
+  anthropic: AI_MODELS,
+  gemini: [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (free tier, recommended)', group: 'Models' },
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite (fastest, free tier)', group: 'Models' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (most detail)', group: 'Models' }
+  ],
+  openai: [
+    { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini (cheaper)', group: 'Models' },
+    { id: 'gpt-4.1', label: 'GPT-4.1', group: 'Models' },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini', group: 'Models' },
+    { id: 'gpt-4o', label: 'GPT-4o', group: 'Models' }
+  ],
+  openrouter: [], opencode: [], custom: []
+};
+const DEFAULT_MODEL = { anthropic: 'claude-opus-5-5', gemini: 'gemini-2.5-flash', openai: 'gpt-4.1-mini' };
+const PIC_SCHEMA = { type: 'object', properties: { title: { type: 'string' }, rows: { type: 'array', items: { type: 'string' } } }, required: ['title', 'rows'], additionalProperties: false };
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
+  set(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) { /* storage blocked */ } }
+};
+const keyStore = p => p === 'anthropic' ? 'mystery-puzzle-claude-key' : 'mystery-puzzle-key-' + p;   // the Claude name is kept so saved keys still load
+const modelStore = p => p === 'anthropic' ? 'mystery-puzzle-claude-model' : 'mystery-puzzle-model-' + p;
+const ai = { provider: 'anthropic', keys: {}, models: {} };
+const prov = () => PROVIDERS[ai.provider];
+const aiBase = () => (prov().editBase ? $('#aiBase').value.trim() : prov().base || '').replace(/\/+$/, '');
+
+function fillModelSelect(keep, addSaved = true) {
+  const sel = $('#aiModel'), list = ai.models[ai.provider] || (ai.models[ai.provider] = STATIC_MODELS[ai.provider].slice());
+  const want = keep || sel.value || DEFAULT_MODEL[ai.provider] || '';
+  if (addSaved && want && !list.some(m => m.id === want) && /^[\w.:/@-]+$/.test(want)) {   // a model picked earlier from a loaded list
+    const base = ai.provider === 'anthropic' && AI_MODELS.find(k => want.startsWith(k.id));
+    list.push(base ? { ...base, id: want, label: base.label + ' (' + want + ')', group: 'Saved' } : { id: want, label: want, group: 'Saved', fb: false, effort: false, so: false });
+  }
+  if (!list.length) { sel.innerHTML = '<option value="">Press “Load models”, or type a model name below</option>'; return; }
+  const groups = [...new Set(list.map(m => m.group))];
+  sel.innerHTML = groups.map(g => `<optgroup label="${esc(g)}">` + list.filter(m => m.group === g).map(m => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('') + '</optgroup>').join('');
+  sel.value = list.some(m => m.id === want) ? want : (list.some(m => m.id === DEFAULT_MODEL[ai.provider]) ? DEFAULT_MODEL[ai.provider] : list[0].id);
+}
+function setProvider(p, first) {
+  if (!PROVIDERS[p]) p = 'anthropic';
+  if (!first) ai.keys[ai.provider] = $('#aiKey').value.trim();
+  ai.provider = p; store.set('mystery-puzzle-ai-provider', p);
+  const P_ = prov();
+  $('#aiProvider').value = p;
+  if (ai.keys[p] === undefined) ai.keys[p] = store.get(keyStore(p));
+  $('#aiKey').value = ai.keys[p] || ''; $('#aiKey').placeholder = P_.key;
+  $('#aiRemember').checked = !!store.get(keyStore(p));
+  $('#aiBaseRow').hidden = !P_.editBase;
+  if (P_.editBase && !$('#aiBase').value) $('#aiBase').value = store.get('mystery-puzzle-base-' + p) || P_.base;
+  $('#aiNote').textContent = P_.note;
+  $('#aiPrivacy').textContent = `What you type and your key go only to ${P_.name}. The key is never put in saved settings files. Don't remember it on a shared computer.`;
+  $('#aiModelCustom').value = '';
+  $('#aiModelHint').textContent = '';
+  $('#aiModel').innerHTML = '';                                   // don't carry the previous service's model over
+  fillModelSelect(store.get(modelStore(p)));
+  if (P_.autoload && !(ai.models[p] || []).length) loadModels();
+}
+
+/* Errors from any provider, in one shape. */
+class AIFail extends Error { constructor(kind, status, msg) { super(msg || kind); this.kind = kind; this.status = status; } }
+async function postJSON(url, headers, body) {
+  let res;
+  try { res = await fetch(url, { method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined }); }
+  catch (e) { throw new AIFail('network'); }
+  let json = null; try { json = await res.json(); } catch (e) { json = null; }
+  if (!res.ok) {
+    const msg = json && (json.error && (json.error.message || json.error) || json.message);
+    const kind = res.status === 401 || res.status === 403 ? 'auth' : res.status === 404 ? 'notfound' : res.status === 429 ? 'rate' : res.status === 400 || res.status === 422 ? 'bad' : 'other';
+    throw new AIFail(kind, res.status, typeof msg === 'string' ? msg.slice(0, 160) : '');
+  }
+  return json;
+}
+function compatHeaders(key) {
+  const h = { 'Content-Type': 'application/json' };
+  if (key) h.Authorization = 'Bearer ' + key;
+  if (ai.provider === 'openrouter') h['X-Title'] = 'Mystery Pixel Fraction Puzzle';
+  return h;
+}
+
+async function loadModels() {
+  const key = $('#aiKey').value.trim(), hint = $('#aiModelHint'), p = ai.provider;
+  if (p !== 'openrouter' && prov().needKey && !key) { hint.textContent = 'Paste your API key first.'; return; }
+  hint.textContent = 'Loading…'; $('#aiModels').disabled = true;
+  try {
+    let list = [];
+    if (p === 'anthropic') {
+      if (!window.Anthropic) throw new AIFail('other');
+      const client = new window.Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
+      for await (const m of client.models.list()) {
+        const known = AI_MODELS.find(k => k.id === m.id), c = m.capabilities || {}, has = v => !!(v && v.supported);
+        list.push({ id: m.id, label: (m.display_name || m.id) + (known && /recommended/.test(known.label) ? ' (recommended)' : ''), group: list.length < 4 ? 'Latest' : 'Older',
+          fb: known ? known.fb : false,
+          effort: m.capabilities ? has(c.effort) && has(c.effort.high) : (known ? known.effort : false),
+          so: m.capabilities ? has(c.structured_outputs) : (known ? known.so : false) });
+      }
+    } else if (p === 'gemini') {
+      const j = await postJSON(`${prov().base}/models?pageSize=1000`, { 'x-goog-api-key': key });
+      list = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && /gemini/.test(m.name))
+        .map(m => { const id = m.name.replace(/^models\//, ''); return { id, label: `${m.displayName || id} (${id})`, group: 'Your models' }; });
+    } else {
+      const base = aiBase(); if (!base) { hint.textContent = 'Type the service address first.'; return; }
+      const j = await postJSON(base + '/models', compatHeaders(key));
+      let ms = (j.data || j.models || []).map(m => typeof m === 'string' ? { id: m } : m).filter(m => m && m.id);
+      if (p === 'openai') ms = ms.filter(m => /^(gpt-|o\d|chatgpt)/.test(m.id) && !/(audio|realtime|transcribe|tts|image|search|embedding)/.test(m.id));
+      const free = m => /:free$/.test(m.id) || (m.pricing && Number(m.pricing.prompt) === 0 && Number(m.pricing.completion) === 0);
+      list = ms.map(m => ({ id: m.id, label: (m.name || m.id) + (free(m) ? ' — free' : ''), group: free(m) ? 'Free' : (p === 'openrouter' ? 'Paid' : 'Your models') }))
+        .sort((a, b) => (a.group === 'Free' ? 0 : 1) - (b.group === 'Free' ? 0 : 1));
+    }
+    if (!list.length) { hint.textContent = 'No models were returned. You can type a model name below.'; return; }
+    ai.models[p] = list; fillModelSelect(store.get(modelStore(p)), false);
+    const nFree = list.filter(m => m.group === 'Free').length;
+    hint.textContent = `${list.length} models loaded${nFree ? `, ${nFree} free (listed first)` : ''}.`;
+  } catch (err) {
+    hint.textContent = err.kind === 'auth' ? 'That API key was not accepted.' : err.kind === 'network' ? `Could not reach ${prov().name}. Check the internet connection${prov().editBase ? ' and the address' : ''}.`
+      : 'Could not load the model list. You can still pick or type a model.';
+  } finally { $('#aiModels').disabled = false; }
+}
+
+/* One request to the chosen provider. Returns the reply text. */
+async function callClaude(key, modelId, system, user) {
+  if (!window.Anthropic) throw new AIFail('other');
+  const client = new window.Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
+  const model = (ai.models.anthropic || AI_MODELS).find(m => m.id === modelId) || AI_MODELS.find(m => modelId.startsWith(m.id)) || { id: modelId, fb: false, effort: false, so: false };
+  const req = { model: modelId, max_tokens: 16000, system, messages: [{ role: 'user', content: user }] };
+  const oc = {};
+  if (model.effort) oc.effort = 'high';
+  if (model.so) oc.format = { type: 'json_schema', schema: PIC_SCHEMA };
+  if (Object.keys(oc).length) req.output_config = oc;
+  let response;
+  try {
+    response = model.fb                                           // re-run on a fallback model if this one declines
+      ? await client.beta.messages.create({ ...req, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
+      : await client.messages.create(req);
+  } catch (err) {
+    const A = window.Anthropic;
+    if (err instanceof A.NotFoundError) throw new AIFail('notfound', 404);
+    if (err instanceof A.AuthenticationError || err instanceof A.PermissionDeniedError) throw new AIFail('auth', err.status);
+    if (err instanceof A.RateLimitError) throw new AIFail('rate', 429);
+    if (err instanceof A.APIConnectionError) throw new AIFail('network');
+    if (err instanceof A.BadRequestError) throw new AIFail('bad', 400, 'try a newer model, such as Claude Opus 5.5');
+    throw new AIFail('other', err.status);
+  }
+  if (response.stop_reason === 'refusal') throw new AIFail('refused');
+  if (response.stop_reason === 'max_tokens') throw new AIFail('cut');
+  const block = response.content.find(b => b.type === 'text');
+  return block ? block.text : '';
+}
+async function callGemini(key, model, system, user) {
+  const url = `${prov().base}/models/${encodeURIComponent(model)}:generateContent`;
+  const headers = { 'Content-Type': 'application/json', 'x-goog-api-key': key };
+  const body = { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: { type: 'OBJECT', properties: { title: { type: 'STRING' }, rows: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['title', 'rows'] } } };
+  let j;
+  try { j = await postJSON(url, headers, body); }
+  catch (e) { if (e.kind !== 'bad') throw e; delete body.generationConfig; j = await postJSON(url, headers, body); }   // older models: plain JSON prompt
+  if (j.promptFeedback && j.promptFeedback.blockReason) throw new AIFail('refused');
+  const c = (j.candidates || [])[0];
+  if (!c) throw new AIFail('other');
+  if (c.finishReason === 'MAX_TOKENS') throw new AIFail('cut');
+  if (/SAFETY|PROHIBITED|BLOCKLIST|RECITATION/.test(c.finishReason || '')) throw new AIFail('refused');
+  return ((c.content && c.content.parts) || []).map(x => x.text || '').join('');
+}
+async function callCompat(key, model, system, user) {
+  const base = aiBase(); if (!base) throw new AIFail('bad', 0, 'type the service address');
+  const url = base + '/chat/completions', headers = compatHeaders(key);
+  const body = { model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] };
+  if (prov().schema) body.response_format = { type: 'json_schema', json_schema: { name: 'pixel_picture', strict: true, schema: PIC_SCHEMA } };
+  let j;
+  try { j = await postJSON(url, headers, body); }
+  catch (e) { if (e.kind !== 'bad' || !body.response_format) throw e; delete body.response_format; j = await postJSON(url, headers, body); }
+  const c = (j.choices || [])[0];
+  if (!c || !c.message) throw new AIFail('other');
+  if (c.finish_reason === 'length') throw new AIFail('cut');
+  if (c.finish_reason === 'content_filter' || c.message.refusal) throw new AIFail('refused');
+  const t = c.message.content;
+  return Array.isArray(t) ? t.map(x => x.text || '').join('') : String(t || '');
+}
+
 async function aiDraw(text) {
   if (P.locked) { drawMsg('The picture is locked. Unlock it to draw a new one.', true); return; }
-  const apiKey = $('#aiKey').value.trim();
-  if (!apiKey) { drawMsg('Paste a Claude API key to draw with AI.', true); $('#aiBox').open = true; return; }
-  if (!window.Anthropic) { drawMsg('The AI drawing part of this file is missing.', true); return; }
+  const P_ = prov(), key = $('#aiKey').value.trim();
+  if (P_.needKey && !key) { drawMsg(`Paste your ${P_.name} API key to draw with AI.`, true); $('#aiBox').open = true; return; }
+  const model = $('#aiModelCustom').value.trim() || $('#aiModel').value;
+  if (!model) { drawMsg('Choose a model, or type a model name.', true); return; }
   rememberKey();
   const n = Number($('#aiSize').value) || 16;
+  const system = AI_SYSTEM(n) + '\n\nReply with only the JSON object, no other text.';
+  const user = `Draw this as ${n} by ${n} pixel art: ${text}`;
   const btns = ['#drawBtn', '#aiBtn'].map(s => $(s)); btns.forEach(b => b.disabled = true);
-  drawMsg(`Drawing "${text}" with AI. This can take up to a minute…`);
+  drawMsg(`Drawing "${text}" with ${P_.name} (${model}). This can take up to a minute…`);
   try {
-    const client = new window.Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    const response = await client.beta.messages.create({
-      model: 'claude-opus-5-5',
-      max_tokens: 16000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: {
-        effort: 'high',
-        format: { type: 'json_schema', schema: { type: 'object', properties: { title: { type: 'string' }, rows: { type: 'array', items: { type: 'string' } } }, required: ['title', 'rows'], additionalProperties: false } }
-      },
-      system: AI_SYSTEM(n),
-      messages: [{ role: 'user', content: `Draw this as ${n} by ${n} pixel art: ${text}` }]
-    });
-    if (response.stop_reason === 'refusal') { drawMsg('Claude declined to draw that. Try describing a different picture.', true); return; }
-    if (response.stop_reason === 'max_tokens') { drawMsg('The drawing was cut off. Please try again.', true); return; }
-    const block = response.content.find(b => b.type === 'text');
+    const reply = ai.provider === 'anthropic' ? await callClaude(key, model, system, user)
+      : ai.provider === 'gemini' ? await callGemini(key, model, system, user) : await callCompat(key, model, system, user);
     let data = null;
-    try { data = block && JSON.parse(block.text); } catch (e) { data = null; }
-    if (!data || !Array.isArray(data.rows) || !data.rows.length) { drawMsg('The AI answer could not be read. Please try again.', true); return; }
+    try { const a = reply.indexOf('{'), z = reply.lastIndexOf('}'); data = a >= 0 && z > a ? JSON.parse(reply.slice(a, z + 1)) : null; }   // some models wrap the JSON in words
+    catch (e) { data = null; }
+    if (!data || !Array.isArray(data.rows) || !data.rows.length) { drawMsg('The AI answer could not be read. Please try again, or try another model.', true); return; }
     const rows = [];                                              // keep only known letters, exactly n×n
     for (let y = 0; y < n; y++) {
       const src = String(data.rows[y] || '').toUpperCase();
       let r = ''; for (let x = 0; x < n; x++) { const ch = src[x] || '.'; r += PIX[ch] ? ch : '.'; }
       rows.push(r);
     }
-    if (!rows.some(r => /[^.X]/.test(r))) { drawMsg('The AI drawing came back empty. Please try again.', true); return; }
+    if (!rows.some(r => /[^.X]/.test(r))) { drawMsg('The AI drawing came back empty. Please try again, or try another model.', true); return; }
     const title = String(data.title || text).slice(0, 40);
     useRows(rows, `AI picture: ${title}`);
-    drawMsg(`Drew "${title}" with AI. Press "Draw with AI" again for a different version.`);
+    drawMsg(`Drew "${title}" with ${P_.name}. Press "Draw with AI" again for a different version.`);
   } catch (err) {
-    const A = window.Anthropic;
-    if (err instanceof A.AuthenticationError || err instanceof A.PermissionDeniedError) drawMsg('That API key was not accepted. Check the key and try again.', true);
-    else if (err instanceof A.RateLimitError) drawMsg('Too many requests right now. Wait a minute and try again.', true);
-    else if (err instanceof A.APIConnectionError) drawMsg('Could not reach Claude. Check the internet connection. Built-in pictures still work offline.', true);
-    else if (err instanceof A.APIError) drawMsg(`Claude returned an error (${err.status || 'unknown'}). Please try again.`, true);
-    else drawMsg('Something went wrong while drawing. Please try again.', true);
+    const msg = {
+      auth: `${P_.name} did not accept that API key. Check the key and try again.`,
+      notfound: 'That model is not available. Pick another model, or press "Load models".',
+      rate: 'Too many requests, or the free limit was reached. Wait a while, or try another model.',
+      network: `Could not reach ${P_.name}. Check the internet connection${P_.editBase ? ' and the address' : ''}. Built-in pictures still work offline.`,
+      refused: 'The AI declined to draw that. Try describing a different picture.',
+      cut: 'The drawing was cut off. Please try again, or pick a smaller picture size.',
+      bad: `${P_.name} did not accept the request${err.message && err.message !== 'bad' ? ': ' + err.message : ''}. Try another model.`
+    }[err.kind];
+    drawMsg(msg || `Something went wrong while drawing${err.status ? ` (error ${err.status})` : ''}. Please try again.`, true);
   } finally { btns.forEach(b => b.disabled = P.locked); }
 }
-const KEY_STORE = 'mystery-puzzle-claude-key';
 function rememberKey() {
-  try { if ($('#aiRemember').checked) localStorage.setItem(KEY_STORE, $('#aiKey').value.trim()); else localStorage.removeItem(KEY_STORE); } catch (e) { /* storage blocked: key stays for this visit only */ }
+  store.set(keyStore(ai.provider), $('#aiRemember').checked ? $('#aiKey').value.trim() : '');
+  if (prov().editBase) store.set('mystery-puzzle-base-' + ai.provider, $('#aiBase').value.trim());
 }
 function setSourceMode(mode) {
   $$('[name=srcmode]').forEach(r => { r.checked = r.value === mode; });
@@ -1835,6 +2045,12 @@ $('#drawBtn').addEventListener('click', drawFromText);
 $('#drawText').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); drawFromText(); } });
 $('#aiBtn').addEventListener('click', () => { const t = $('#drawText').value.trim(); if (!t) { drawMsg('Type what the picture should be first.', true); return; } aiDraw(t); });
 $('#aiRemember').addEventListener('change', rememberKey);
+$('#aiModels').addEventListener('click', loadModels);
+$('#aiModel').addEventListener('change', () => store.set(modelStore(ai.provider), $('#aiModel').value));
+$('#aiProvider').innerHTML = Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('');
+$('#aiProvider').addEventListener('change', e => setProvider(e.target.value));
+$('#aiBase').addEventListener('change', () => { ai.models[ai.provider] = []; fillModelSelect(); });
+setProvider(store.get('mystery-puzzle-ai-provider') || 'anthropic', true);
 $('#iconChips').innerHTML = Object.entries(ICONS).map(([k, ic]) => `<button type="button" class="chip" data-icon="${k}">${esc(ic.label)}</button>`).join('');
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-icon],[data-sample]'); if (!b || P.locked) return;
@@ -1843,7 +2059,6 @@ document.addEventListener('click', e => {
   useRows(ICONS[k].rows, `Picture: ${ICONS[k].label}`);
   if (b.dataset.icon) { $('#drawText').value = ICONS[k].label; drawMsg(`Drew the built-in ${ICONS[k].label.toLowerCase()}.`); }
 });
-try { const k = localStorage.getItem(KEY_STORE); if (k) { $('#aiKey').value = k; $('#aiRemember').checked = true; } } catch (e) { /* no storage */ }
 
 /* picture editor: pointer + keyboard */
 let painting = false, paintedAny = false, lastPaint = -1;
