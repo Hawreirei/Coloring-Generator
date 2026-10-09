@@ -200,6 +200,10 @@ table.al th,table.al td{border-bottom:1px solid var(--line);padding:3px 8px;text
             <div class="grp" style="margin-top:8px">
               <label>Claude API key <input type="password" id="aiKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"></label>
               <label class="chk"><input type="checkbox" id="aiRemember"> Remember the key on this computer</label>
+              <label>Model
+                <select id="aiModel"></select>
+              </label>
+              <div class="row"><button class="btn sm" id="aiModels" type="button">Load models from my account</button><span class="hint" id="aiModelHint"></span></div>
               <label>Picture size
                 <select id="aiSize"><option value="12">12 × 12 (big squares, easy)</option><option value="16" selected>16 × 16</option><option value="20">20 × 20</option><option value="24">24 × 24 (more detail)</option></select>
               </label>
@@ -1774,6 +1778,67 @@ The picture has to be recognisable at a glance by a six-year-old at this small s
 - Use at most six colours besides black and white. Eyes and other tiny details can be black pixels.
 - Leave everything around the subject as "." (no scenery, no frame, no text).
 - No shading, gradients, dithering or single stray pixels.`;
+/* Models offered for AI drawing, newest first. Each row says which request options the model accepts:
+   fb = server-side refusal fallback, effort = effort setting, so = structured (JSON schema) output. */
+const AI_MODELS = [
+  { id: 'claude-fable-5-1', label: 'Claude Fable 5.1 (most capable, slowest, most expensive)', group: 'Latest', fb: true, effort: true, so: true },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (recommended)', group: 'Latest', fb: true, effort: true, so: true },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (faster, cheaper)', group: 'Latest', fb: true, effort: true, so: true },
+  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (fastest, cheapest)', group: 'Latest', fb: false, effort: true, so: true },
+  { id: 'claude-fable-5', label: 'Claude Fable 5', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-opus-5', label: 'Claude Opus 5', group: 'Older', fb: true, effort: true, so: true },
+  { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-opus-4-7', label: 'Claude Opus 4.7', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-opus-4-5', label: 'Claude Opus 4.5', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', group: 'Older', fb: false, effort: true, so: true },
+  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', group: 'Older', fb: false, effort: false, so: true },
+  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', group: 'Older', fb: false, effort: false, so: true },
+  { id: 'claude-sonnet-4-0', label: 'Claude Sonnet 4 (being retired)', group: 'Older', fb: false, effort: false, so: false },
+  { id: 'claude-opus-4-0', label: 'Claude Opus 4 (being retired)', group: 'Older', fb: false, effort: false, so: false }
+];
+const MODEL_STORE = 'mystery-puzzle-claude-model';
+let aiModels = AI_MODELS.slice();
+function fillModelSelect(keep, addSaved = true) {
+  const sel = $('#aiModel'), want = keep || sel.value || 'claude-opus-5-5';
+  if (addSaved && want && !aiModels.some(m => m.id === want) && /^claude-[a-z0-9-]+$/.test(want)) {   // a model picked earlier from the account list
+    const base = AI_MODELS.find(k => want.startsWith(k.id));
+    aiModels.push(base ? { ...base, id: want, label: base.label + ' (' + want + ')', group: 'Saved' } : { id: want, label: want, group: 'Saved', fb: false, effort: false, so: false });
+  }
+  const groups = [...new Set(aiModels.map(m => m.group))];
+  sel.innerHTML = groups.map(g => `<optgroup label="${esc(g)}">` + aiModels.filter(m => m.group === g).map(m => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('') + '</optgroup>').join('');
+  sel.value = aiModels.some(m => m.id === want) ? want : (aiModels.some(m => m.id === 'claude-opus-5-5') ? 'claude-opus-5-5' : aiModels[0].id);
+}
+/* Ask the API which models this key can use, and read what each one supports. */
+async function loadAccountModels() {
+  const apiKey = $('#aiKey').value.trim(), hint = $('#aiModelHint');
+  if (!apiKey) { hint.textContent = 'Paste your API key first.'; return; }
+  if (!window.Anthropic) { hint.textContent = 'The AI part of this file is missing.'; return; }
+  hint.textContent = 'Loading…'; $('#aiModels').disabled = true;
+  try {
+    const client = new window.Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    const list = [];
+    for await (const m of client.models.list()) {
+      const known = AI_MODELS.find(k => k.id === m.id), c = m.capabilities || {};
+      const has = v => !!(v && v.supported);
+      list.push({
+        id: m.id, label: (m.display_name || m.id) + (known && /recommended/.test(known.label) ? ' (recommended)' : ''),
+        group: list.length < 4 ? 'Latest' : 'Older',
+        fb: known ? known.fb : false,
+        effort: m.capabilities ? has(c.effort) && has(c.effort.high) : (known ? known.effort : false),
+        so: m.capabilities ? has(c.structured_outputs) : (known ? known.so : false)
+      });
+    }
+    if (!list.length) { hint.textContent = 'Your account returned no models.'; return; }
+    aiModels = list; fillModelSelect(undefined, false);
+    hint.textContent = `${list.length} models available to your key.`;
+  } catch (err) {
+    const A = window.Anthropic;
+    hint.textContent = err instanceof A.AuthenticationError || err instanceof A.PermissionDeniedError ? 'That API key was not accepted.'
+      : err instanceof A.APIConnectionError ? 'Could not reach Claude. Check the internet connection.' : 'Could not load the model list. The built-in list still works.';
+  } finally { $('#aiModels').disabled = false; }
+}
 async function aiDraw(text) {
   if (P.locked) { drawMsg('The picture is locked. Unlock it to draw a new one.', true); return; }
   const apiKey = $('#aiKey').value.trim();
@@ -1782,26 +1847,31 @@ async function aiDraw(text) {
   rememberKey();
   const n = Number($('#aiSize').value) || 16;
   const btns = ['#drawBtn', '#aiBtn'].map(s => $(s)); btns.forEach(b => b.disabled = true);
-  drawMsg(`Drawing "${text}" with AI. This can take up to a minute…`);
+  drawMsg(`Drawing "${text}" with ${$('#aiModel').selectedOptions[0] ? $('#aiModel').selectedOptions[0].text.replace(/ \(.*\)$/, '') : 'AI'}. This can take up to a minute…`);
   try {
     const client = new window.Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    const response = await client.beta.messages.create({
-      model: 'claude-opus-5-5',
+    const model = aiModels.find(m => m.id === $('#aiModel').value) || AI_MODELS[1];
+    const req = {
+      model: model.id,
       max_tokens: 16000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: {
-        effort: 'high',
-        format: { type: 'json_schema', schema: { type: 'object', properties: { title: { type: 'string' }, rows: { type: 'array', items: { type: 'string' } } }, required: ['title', 'rows'], additionalProperties: false } }
-      },
-      system: AI_SYSTEM(n),
+      system: AI_SYSTEM(n) + (model.so ? '' : '\n\nReply with only the JSON object, no other text.'),
       messages: [{ role: 'user', content: `Draw this as ${n} by ${n} pixel art: ${text}` }]
-    });
+    };
+    const oc = {};
+    if (model.effort) oc.effort = 'high';
+    if (model.so) oc.format = { type: 'json_schema', schema: { type: 'object', properties: { title: { type: 'string' }, rows: { type: 'array', items: { type: 'string' } } }, required: ['title', 'rows'], additionalProperties: false } };
+    if (Object.keys(oc).length) req.output_config = oc;
+    const response = model.fb                                     // re-run on a fallback model if this one declines
+      ? await client.beta.messages.create({ ...req, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
+      : await client.messages.create(req);
     if (response.stop_reason === 'refusal') { drawMsg('Claude declined to draw that. Try describing a different picture.', true); return; }
     if (response.stop_reason === 'max_tokens') { drawMsg('The drawing was cut off. Please try again.', true); return; }
     const block = response.content.find(b => b.type === 'text');
     let data = null;
-    try { data = block && JSON.parse(block.text); } catch (e) { data = null; }
+    try {
+      const t = block ? block.text : '', a = t.indexOf('{'), z = t.lastIndexOf('}');
+      data = a >= 0 && z > a ? JSON.parse(t.slice(a, z + 1)) : null;   // older models may wrap the JSON in words
+    } catch (e) { data = null; }
     if (!data || !Array.isArray(data.rows) || !data.rows.length) { drawMsg('The AI answer could not be read. Please try again.', true); return; }
     const rows = [];                                              // keep only known letters, exactly n×n
     for (let y = 0; y < n; y++) {
@@ -1815,9 +1885,11 @@ async function aiDraw(text) {
     drawMsg(`Drew "${title}" with AI. Press "Draw with AI" again for a different version.`);
   } catch (err) {
     const A = window.Anthropic;
-    if (err instanceof A.AuthenticationError || err instanceof A.PermissionDeniedError) drawMsg('That API key was not accepted. Check the key and try again.', true);
+    if (err instanceof A.NotFoundError) drawMsg('That model is not available to your API key. Pick another model, or press "Load models from my account".', true);
+    else if (err instanceof A.AuthenticationError || err instanceof A.PermissionDeniedError) drawMsg('That API key was not accepted. Check the key and try again.', true);
     else if (err instanceof A.RateLimitError) drawMsg('Too many requests right now. Wait a minute and try again.', true);
     else if (err instanceof A.APIConnectionError) drawMsg('Could not reach Claude. Check the internet connection. Built-in pictures still work offline.', true);
+    else if (err instanceof A.BadRequestError) drawMsg('This model did not accept the request. Try a newer model, such as Claude Opus 5.5.', true);
     else if (err instanceof A.APIError) drawMsg(`Claude returned an error (${err.status || 'unknown'}). Please try again.`, true);
     else drawMsg('Something went wrong while drawing. Please try again.', true);
   } finally { btns.forEach(b => b.disabled = P.locked); }
@@ -1835,6 +1907,10 @@ $('#drawBtn').addEventListener('click', drawFromText);
 $('#drawText').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); drawFromText(); } });
 $('#aiBtn').addEventListener('click', () => { const t = $('#drawText').value.trim(); if (!t) { drawMsg('Type what the picture should be first.', true); return; } aiDraw(t); });
 $('#aiRemember').addEventListener('change', rememberKey);
+$('#aiModels').addEventListener('click', loadAccountModels);
+$('#aiModel').addEventListener('change', () => { try { localStorage.setItem(MODEL_STORE, $('#aiModel').value); } catch (e) { /* no storage */ } });
+let savedModel = ''; try { savedModel = localStorage.getItem(MODEL_STORE) || ''; } catch (e) { /* no storage */ }
+fillModelSelect(savedModel);
 $('#iconChips').innerHTML = Object.entries(ICONS).map(([k, ic]) => `<button type="button" class="chip" data-icon="${k}">${esc(ic.label)}</button>`).join('');
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-icon],[data-sample]'); if (!b || P.locked) return;

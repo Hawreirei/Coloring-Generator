@@ -17,7 +17,9 @@ Instead of uploading, choose **Type what to draw** and type a word such as `cat`
   only crayon colors with a black outline, and land on the grid one square per pixel, so they are always clear.
   English and common Indonesian words are understood.
 - **Draw anything with AI** (optional): paste a Claude API key and the tool asks Claude to draw the subject as
-  crayon-color pixel art (12×12 to 24×24). This needs internet; the key is sent only to Anthropic, is never put
+  crayon-color pixel art (12×12 to 24×24). You choose the model: the latest Claude models (Fable 5.1, Opus 5.5
+  recommended, Sonnet 5.5, Haiku 5.5) or older ones still served, or press "Load models from my account" to list
+  exactly the models your key can use. This needs internet; the key is sent only to Anthropic, is never put
   in saved settings files, and is remembered on the computer only if you tick the box. The official Anthropic
   SDK (MIT License) is bundled into the file for this.
 
