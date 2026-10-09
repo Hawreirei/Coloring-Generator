@@ -9,6 +9,18 @@ Upload a picture (PNG, JPG or WebP), choose a grid size and up to 12 colors (sna
 - a per-cell **answer list** (print or CSV),
 - a **settings file** (JSON) that rebuilds the same puzzle.
 
+## Type what to draw
+
+Instead of uploading, choose **Type what to draw** and type a word such as `cat`, `rocket` or `es krim`.
+
+- **36 built-in pixel pictures** (animals, fruit, vehicles, weather, toys and more) work offline. They use
+  only crayon colors with a black outline, and land on the grid one square per pixel, so they are always clear.
+  English and common Indonesian words are understood.
+- **Draw anything with AI** (optional): paste a Claude API key and the tool asks Claude to draw the subject as
+  crayon-color pixel art (12×12 to 24×24). This needs internet; the key is sent only to Anthropic, is never put
+  in saved settings files, and is remembered on the computer only if you tick the box. The official Anthropic
+  SDK (MIT License) is bundled into the file for this.
+
 ## How pictures are turned into squares
 
 - The background is found from the picture's edges (plain, gradient or colored) and removed, so only the
